@@ -59,9 +59,9 @@ import com.nextcloud.talk.utils.singletons.ApplicationWideMessageHolder;
 import com.nextcloud.talk.utils.ssl.MagicTrustManager;
 
 import de.cotech.hw.fido.WebViewFidoBridge;
-import io.reactivex.android.schedulers.AndroidSchedulers;
-import io.reactivex.disposables.Disposable;
-import io.reactivex.schedulers.Schedulers;
+import io.reactivex.rxjava3.android.schedulers.AndroidSchedulers;
+import io.reactivex.rxjava3.disposables.Disposable;
+import io.reactivex.rxjava3.schedulers.Schedulers;
 import io.requery.Persistable;
 import io.requery.reactivex.ReactiveEntityStore;
 import org.greenrobot.eventbus.EventBus;

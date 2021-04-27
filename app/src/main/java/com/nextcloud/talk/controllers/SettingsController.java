@@ -878,12 +878,12 @@ public class SettingsController extends BaseController {
                 .subscribe(new Observer<UserProfileOverall>() {
 
                     @Override
-                    public void onSubscribe(@io.reactivex.annotations.NonNull Disposable d) {
+                    public void onSubscribe(@io.reactivex.rxjava3.annotations.NonNull Disposable d) {
 
                     }
 
                     @Override
-                    public void onNext(@io.reactivex.annotations.NonNull UserProfileOverall userProfileOverall) {
+                    public void onNext(@io.reactivex.rxjava3.annotations.NonNull UserProfileOverall userProfileOverall) {
                         if (userProfileOverall.getOcs().getData().getPhone().isEmpty()) {
                             askForPhoneNumber();
                         } else {
@@ -892,7 +892,7 @@ public class SettingsController extends BaseController {
                     }
 
                     @Override
-                    public void onError(@io.reactivex.annotations.NonNull Throwable e) {
+                    public void onError(@io.reactivex.rxjava3.annotations.NonNull Throwable e) {
 
                     }
 
@@ -962,12 +962,12 @@ public class SettingsController extends BaseController {
                 .subscribe(new Observer<GenericOverall>() {
 
                     @Override
-                    public void onSubscribe(@io.reactivex.annotations.NonNull Disposable d) {
+                    public void onSubscribe(@io.reactivex.rxjava3.annotations.NonNull Disposable d) {
 
                     }
 
                     @Override
-                    public void onNext(@io.reactivex.annotations.NonNull GenericOverall genericOverall) {
+                    public void onNext(@io.reactivex.rxjava3.annotations.NonNull GenericOverall genericOverall) {
                         int statusCode = genericOverall.ocs.meta.statusCode;
                         if (statusCode == 200) {
                             dialog.dismiss();
@@ -983,7 +983,7 @@ public class SettingsController extends BaseController {
                     }
 
                     @Override
-                    public void onError(@io.reactivex.annotations.NonNull Throwable e) {
+                    public void onError(@io.reactivex.rxjava3.annotations.NonNull Throwable e) {
                         textInputLayout.setHelperText(context.getResources().getString(
                                 R.string.nc_settings_phone_book_integration_phone_number_dialog_invalid));
                         Log.e(TAG, "setPhoneNumber error", e);
@@ -1009,15 +1009,15 @@ public class SettingsController extends BaseController {
                     .observeOn(AndroidSchedulers.mainThread())
                     .subscribe(new Observer<GenericOverall>() {
                         @Override
-                        public void onSubscribe(@io.reactivex.annotations.NonNull Disposable d) {
+                        public void onSubscribe(@io.reactivex.rxjava3.annotations.NonNull Disposable d) {
                         }
 
                         @Override
-                        public void onNext(@io.reactivex.annotations.NonNull GenericOverall genericOverall) {
+                        public void onNext(@io.reactivex.rxjava3.annotations.NonNull GenericOverall genericOverall) {
                         }
 
                         @Override
-                        public void onError(@io.reactivex.annotations.NonNull Throwable e) {
+                        public void onError(@io.reactivex.rxjava3.annotations.NonNull Throwable e) {
                             appPreferences.setReadPrivacy(!newValue);
                             ((Checkable) readPrivacyPreference.findViewById(R.id.mp_checkable)).setChecked(!newValue);
                         }

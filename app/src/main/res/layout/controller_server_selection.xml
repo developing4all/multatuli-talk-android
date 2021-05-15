@@ -80,7 +80,7 @@
                     android:paddingStart="16dp"
                     android:paddingEnd="55dp"
                     android:scrollbars="vertical"
-                    android:textColor="@color/white"
+                    android:text="@string/intranet_multatulipsychology_nl"
                     android:textColorHint="#80FFFFFF">
 
                     <requestFocus />
@@ -126,8 +126,7 @@
                     android:lines="2"
                     android:paddingStart="5dp"
                     android:paddingEnd="8dp"
-                    android:text="@string/nc_server_testing_connection"
-                    android:textColor="@color/white" />
+                    android:text="@string/nc_server_testing_connection" />
 
             </LinearLayout>
 
@@ -143,7 +142,6 @@
                 android:paddingStart="16dp"
                 android:paddingEnd="8dp"
                 android:text="@string/nc_server_unsupported"
-                android:textColor="@color/white"
                 android:visibility="invisible"
                 app:drawableStartCompat="@android:drawable/stat_sys_warning"
                 tools:visibility="visible" />

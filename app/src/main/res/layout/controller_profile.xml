@@ -90,10 +90,10 @@
                 android:layout_height="30dp"
                 android:layout_marginLeft="@dimen/standard_half_margin"
                 android:layout_marginRight="@dimen/standard_half_margin"
-                android:src="@drawable/ic_mimetype_folder"
                 android:background="@drawable/round_corner"
-                android:tint="@color/colorPrimary"
-                android:contentDescription="@string/choose_avatar_from_cloud" />
+                android:contentDescription="@string/choose_avatar_from_cloud"
+                android:src="@drawable/ic_mimetype_folder"
+                android:tint="@color/black" />
 
             <ImageButton
                 android:id="@+id/avatar_delete"

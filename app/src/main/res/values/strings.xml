@@ -430,4 +430,5 @@
     <string name="filename_progress">%1$s (%2$d)</string>
     <string name="nc_dialog_invalid_password">Invalid password</string>
     <string name="nc_dialog_reauth_or_delete">Do you want to reauthorize or delete this account?</string>
+    <string name="intranet_multatulipsychology_nl">intranet.multatulipsychology.nl</string>
 </resources>

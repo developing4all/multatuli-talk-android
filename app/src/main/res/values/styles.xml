@@ -40,6 +40,8 @@
         <item name="android:actionMenuTextAppearance">@style/menuTextAppearance</item>
         <item name="searchViewStyle">@style/SearchView</item>
         <item name="android:navigationBarColor">@color/bg_default</item>
+        <item name="drawableTint">@color/colorPrimaryDark</item>
+        <item name="android:fillColor">@color/colorPrimaryDark</item>
     </style>
 
     <style name="CallTheme" parent="AppTheme">
@@ -104,17 +106,17 @@
     </style>
 
     <style name="Widget.App.Login.TextInputLayout" parent="Widget.MaterialComponents.TextInputLayout.OutlinedBox">
-        <item name="colorControlActivated">@color/white</item>
-        <item name="colorControlHighlight">@color/white</item>
+        <item name="colorControlActivated">@color/colorPrimaryDark</item>
+        <item name="colorControlHighlight">@color/colorPrimaryDark</item>
         <item name="materialThemeOverlay">@style/ThemeOverlay.App.Login.TextInputLayout</item>
         <item name="shapeAppearance">@style/ShapeAppearance.MaterialComponents.SmallComponent</item>
-        <item name="hintTextColor">@color/white</item>
-        <item name="helperTextTextColor">@color/white</item>
+        <item name="hintTextColor">@color/colorPrimaryDark</item>
+        <item name="helperTextTextColor">@color/colorPrimaryDark</item>
     </style>
 
     <style name="ThemeOverlay.App.Login.TextInputLayout" parent="">
-        <item name="colorPrimary">@color/white</item>
-        <item name="colorOnSurface">@color/white</item>
+        <item name="colorPrimary">@color/colorPrimaryDark</item>
+        <item name="colorOnSurface">@color/colorPrimaryDark</item>
         <item name="colorError">@color/nc_darkRed</item>
         <item name="textAppearanceSubtitle1">@style/TextAppearance.MaterialComponents.Subtitle1</item>
         <item name="textAppearanceCaption">@style/TextAppearance.MaterialComponents.Caption</item>

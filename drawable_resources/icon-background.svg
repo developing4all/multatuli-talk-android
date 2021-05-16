@@ -1,4 +1,75 @@
-<svg clip-rule="evenodd" fill-rule="evenodd" stroke-linejoin="round" stroke-miterlimit="1.4142" version="1.1"
-    viewBox="0 0 1344 1344" xml:space="preserve" xmlns="http://www.w3.org/2000/svg"><defs><linearGradient id="a" x1="18.23" x2="150" y1="150" y2="-7.6294e-6" gradientTransform="matrix(8.96 0 0 8.96 -7.8457e-5 .00019795)" gradientUnits="userSpaceOnUse"><stop stop-color="#0082c9" offset="0"/><stop
-    stop-color="#1cafff" offset="1" /></linearGradient></defs>
-    <rect y=".00012207" width="1344" height="1344" fill="url(#a)" fill-rule="evenodd" /></svg>
+<?xml version="1.0" encoding="UTF-8" standalone="no"?>
+<svg
+   xmlns:dc="http://purl.org/dc/elements/1.1/"
+   xmlns:cc="http://creativecommons.org/ns#"
+   xmlns:rdf="http://www.w3.org/1999/02/22-rdf-syntax-ns#"
+   xmlns:svg="http://www.w3.org/2000/svg"
+   xmlns="http://www.w3.org/2000/svg"
+   xmlns:sodipodi="http://sodipodi.sourceforge.net/DTD/sodipodi-0.dtd"
+   xmlns:inkscape="http://www.inkscape.org/namespaces/inkscape"
+   clip-rule="evenodd"
+   fill-rule="evenodd"
+   stroke-linejoin="round"
+   stroke-miterlimit="1.4142"
+   version="1.1"
+   viewBox="0 0 1344 1344"
+   xml:space="preserve"
+   id="svg11"
+   sodipodi:docname="icon-background.svg"
+   inkscape:version="0.92.4 (5da689c313, 2019-01-14)"><metadata
+   id="metadata15"><rdf:RDF><cc:Work
+       rdf:about=""><dc:format>image/svg+xml</dc:format><dc:type
+         rdf:resource="http://purl.org/dc/dcmitype/StillImage" /></cc:Work></rdf:RDF></metadata><sodipodi:namedview
+   pagecolor="#ffffff"
+   bordercolor="#666666"
+   borderopacity="1"
+   objecttolerance="10"
+   gridtolerance="10"
+   guidetolerance="10"
+   inkscape:pageopacity="0"
+   inkscape:pageshadow="2"
+   inkscape:window-width="1920"
+   inkscape:window-height="1017"
+   id="namedview13"
+   showgrid="false"
+   inkscape:zoom="0.17559524"
+   inkscape:cx="-253.42373"
+   inkscape:cy="672"
+   inkscape:window-x="-8"
+   inkscape:window-y="-8"
+   inkscape:window-maximized="1"
+   inkscape:current-layer="svg11" /><defs
+   id="defs7"><linearGradient
+     id="255"
+     x1="18.23"
+     x2="150"
+     y1="150"
+     y2="-7.6294e-6"
+     gradientTransform="matrix(8.96 0 0 8.96 -7.8457e-5 .00019795)"
+     gradientUnits="userSpaceOnUse"><stop
+       stop-color="#0082c9"
+       offset="0"
+       id="stop2"
+       style="stop-color:#f2f2f2;stop-opacity:1" /><stop
+       stop-color="#1cafff"
+       offset="1"
+       id="stop4"
+       style="stop-color:#bababa;stop-opacity:1" /></linearGradient><filter
+     inkscape:collect="always"
+     style="color-interpolation-filters:sRGB"
+     id="filter857"
+     x="-0.0012"
+     width="1.0024"
+     y="-0.0012"
+     height="1.0024"><feGaussianBlur
+       inkscape:collect="always"
+       stdDeviation="0.672"
+       id="feGaussianBlur859" /></filter></defs>
+    <rect
+   y=".00012207"
+   width="1344"
+   height="1344"
+   fill="url(#a)"
+   fill-rule="evenodd"
+   id="rect9"
+   style="fill:url(#255);filter:url(#filter857)" /></svg>

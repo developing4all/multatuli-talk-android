@@ -64,15 +64,15 @@ android {
         productFlavors {
             // used for f-droid
             generic {
-                applicationId 'com.nextcloud.talk2'
+                applicationId 'com.multatuli.talk2'
                 dimension "default"
             }
             gplay {
-                applicationId 'com.nextcloud.talk2'
+                applicationId 'com.multatuli.talk2'
                 dimension "default"
             }
             qa {
-                applicationId "com.nextcloud.talk2.qa"
+                applicationId "com.multatuli.talk2.qa"
                 dimension "default"
                 versionCode 1
                 versionName "1"

@@ -116,7 +116,6 @@
         android:layout_height="wrap_content"
         android:layout_gravity="bottom|end"
         android:layout_margin="16dp"
-        android:backgroundTint="@color/colorPrimaryDark"
         android:contentDescription="@string/nc_new_conversation"
         app:borderWidth="0dp"
         app:srcCompat="@drawable/ic_add_white_24px"

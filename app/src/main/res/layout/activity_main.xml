@@ -34,9 +34,9 @@
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
         android:background="@color/bg_default"
-        android:elevation="0dp"
         android:clipChildren="true"
         android:clipToPadding="false"
+        android:elevation="0dp"
         android:windowContentOverlay="@null"
         app:elevation="0dp">
 
@@ -48,7 +48,6 @@
             android:id="@+id/toolbar"
             android:layout_width="match_parent"
             android:layout_height="?attr/actionBarSize"
-            android:background="@color/appbar"
             android:theme="?attr/actionBarPopupTheme"
             app:layout_scrollFlags="enterAlwaysCollapsed|noScroll"
             app:navigationIconTint="@color/fontAppbar"
@@ -62,9 +61,9 @@
                 android:layout_height="32dp"
                 android:layout_gravity="center_vertical|end"
                 android:layout_marginEnd="8dp"
-                android:visibility="gone"
                 android:indeterminateTint="@color/white"
-                android:scaleType="fitCenter" />
+                android:scaleType="fitCenter"
+                android:visibility="gone" />
 
         </com.google.android.material.appbar.MaterialToolbar>
 

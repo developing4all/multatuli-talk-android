@@ -25,9 +25,12 @@ package com.nextcloud.talk.controllers;
 import android.animation.AnimatorInflater;
 import android.annotation.SuppressLint;
 import android.app.SearchManager;
+import android.content.ClipData;
 import android.content.Context;
 import android.content.Intent;
+import android.content.pm.PackageManager;
 import android.graphics.Bitmap;
+import android.net.Uri;
 import android.os.Build;
 import android.os.Bundle;
 import android.os.Handler;
@@ -43,11 +46,11 @@ import android.view.ViewGroup;
 import android.view.inputmethod.EditorInfo;
 import android.widget.LinearLayout;
 import android.widget.RelativeLayout;
+import android.widget.Toast;
 
 import com.bluelinelabs.conductor.RouterTransaction;
 import com.bluelinelabs.conductor.changehandler.HorizontalChangeHandler;
 import com.bluelinelabs.conductor.changehandler.VerticalChangeHandler;
-import com.bluelinelabs.conductor.internal.NoOpControllerChangeHandler;
 import com.facebook.common.executors.UiThreadImmediateExecutorService;
 import com.facebook.common.references.CloseableReference;
 import com.facebook.datasource.DataSource;
@@ -60,7 +63,6 @@ import com.google.android.material.button.MaterialButton;
 import com.google.android.material.floatingactionbutton.FloatingActionButton;
 import com.kennyc.bottomsheet.BottomSheet;
 import com.nextcloud.talk.R;
-import com.nextcloud.talk.activities.MagicCallActivity;
 import com.nextcloud.talk.activities.MainActivity;
 import com.nextcloud.talk.adapters.items.CallItem;
 import com.nextcloud.talk.adapters.items.ConversationItem;
@@ -76,6 +78,8 @@ import com.nextcloud.talk.interfaces.ConversationMenuInterface;
 import com.nextcloud.talk.jobs.AccountRemovalWorker;
 import com.nextcloud.talk.jobs.ContactAddressBookWorker;
 import com.nextcloud.talk.jobs.DeleteConversationWorker;
+import com.nextcloud.talk.jobs.UploadAndShareFilesWorker;
+import com.nextcloud.talk.models.database.CapabilitiesUtil;
 import com.nextcloud.talk.models.database.UserEntity;
 import com.nextcloud.talk.models.json.conversations.Conversation;
 import com.nextcloud.talk.models.json.participants.Participant;
@@ -84,9 +88,11 @@ import com.nextcloud.talk.utils.ApiUtils;
 import com.nextcloud.talk.utils.ConductorRemapping;
 import com.nextcloud.talk.utils.DisplayUtils;
 import com.nextcloud.talk.utils.KeyboardUtils;
+import com.nextcloud.talk.utils.UriUtils;
 import com.nextcloud.talk.utils.bundle.BundleKeys;
 import com.nextcloud.talk.utils.database.user.UserUtils;
 import com.nextcloud.talk.utils.preferences.AppPreferences;
+import com.webianks.library.PopupBubble;
 import com.yarolegovich.lovelydialog.LovelySaveStateHandler;
 import com.yarolegovich.lovelydialog.LovelyStandardDialog;
 
@@ -94,11 +100,13 @@ import org.apache.commons.lang3.builder.CompareToBuilder;
 import org.greenrobot.eventbus.EventBus;
 import org.greenrobot.eventbus.Subscribe;
 import org.greenrobot.eventbus.ThreadMode;
+import org.jetbrains.annotations.NotNull;
 import org.parceler.Parcels;
 
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.List;
+import java.util.Objects;
 
 import javax.inject.Inject;
 
@@ -117,7 +125,6 @@ import androidx.work.OneTimeWorkRequest;
 import androidx.work.WorkManager;
 import autodagger.AutoInjector;
 import butterknife.BindView;
-import eu.davidea.fastscroller.FastScroller;
 import eu.davidea.flexibleadapter.FlexibleAdapter;
 import eu.davidea.flexibleadapter.common.SmoothScrollLinearLayoutManager;
 import eu.davidea.flexibleadapter.items.AbstractFlexibleItem;
@@ -128,12 +135,13 @@ import retrofit2.HttpException;
 
 @AutoInjector(NextcloudTalkApplication.class)
 public class ConversationsListController extends BaseController implements SearchView.OnQueryTextListener,
-        FlexibleAdapter.OnItemClickListener, FlexibleAdapter.OnItemLongClickListener, FastScroller
-                .OnScrollStateChangeListener, ConversationMenuInterface {
+        FlexibleAdapter.OnItemClickListener, FlexibleAdapter.OnItemLongClickListener, ConversationMenuInterface {
 
-    public static final String TAG = "ConversationsListController";
+    public static final String TAG = "ConvListController";
     public static final int ID_DELETE_CONVERSATION_DIALOG = 0;
+    public static final int UNREAD_BUBBLE_DELAY = 2500;
     private static final String KEY_SEARCH_QUERY = "ContactsController.searchQuery";
+    private final Bundle bundle;
     @Inject
     UserUtils userUtils;
 
@@ -161,11 +169,11 @@ public class ConversationsListController extends BaseController implements Searc
     @BindView(R.id.emptyLayout)
     RelativeLayout emptyLayoutView;
 
-    @BindView(R.id.fast_scroller)
-    FastScroller fastScroller;
-
     @BindView(R.id.floatingActionButton)
     FloatingActionButton floatingActionButton;
+
+    @BindView(R.id.newMentionPopupBubble)
+    PopupBubble newMentionPopupBubble;
 
     private UserEntity currentUser;
     private Disposable roomsQueryDisposable;
@@ -190,9 +198,22 @@ public class ConversationsListController extends BaseController implements Searc
 
     private Bundle conversationMenuBundle = null;
 
-    public ConversationsListController() {
+    private boolean showShareToScreen = false;
+
+    private ArrayList<String> filesToShare;
+    private Conversation selectedConversation;
+
+    private String textToPaste = "";
+
+    private boolean forwardMessage;
+
+    private SmoothScrollLinearLayoutManager layoutManager;
+
+    public ConversationsListController(Bundle bundle) {
         super();
         setHasOptionsMenu(true);
+        forwardMessage = bundle.getBoolean(BundleKeys.INSTANCE.getKEY_FORWARD_MSG_FLAG());
+        this.bundle = bundle;
     }
 
     @Override
@@ -252,7 +273,7 @@ public class ConversationsListController extends BaseController implements Searc
                 @Override
                 protected void onFailureImpl(DataSource<CloseableReference<CloseableImage>> dataSource) {
                     if (getResources() != null) {
-                        button.setIcon(ResourcesCompat.getDrawable(getResources(), R.drawable.ic_settings_white_24dp, null));
+                        button.setIcon(ResourcesCompat.getDrawable(getResources(), R.drawable.ic_user, null));
                     }
                 }
             }, UiThreadImmediateExecutorService.getInstance());
@@ -265,19 +286,19 @@ public class ConversationsListController extends BaseController implements Searc
         if (!eventBus.isRegistered(this)) {
             eventBus.register(this);
         }
-
         currentUser = userUtils.getCurrentUser();
 
         if (currentUser != null) {
-            if (currentUser.isServerEOL()) {
+            if (CapabilitiesUtil.isServerEOL(currentUser)) {
                 showServerEOLDialog();
                 return;
             }
 
             credentials = ApiUtils.getCredentials(currentUser.getUsername(), currentUser.getToken());
-            shouldUseLastMessageLayout = currentUser.hasSpreedFeatureCapability("last-room-activity");
+            shouldUseLastMessageLayout = CapabilitiesUtil.hasSpreedFeatureCapability(currentUser,
+                                                                                     "last-room-activity");
             if (getActivity() != null && getActivity() instanceof MainActivity) {
-                loadUserAvatar(((MainActivity) getActivity()).settingsButton);
+                loadUserAvatar(((MainActivity) getActivity()).binding.switchAccountButton);
             }
             fetchData(false);
         }
@@ -325,73 +346,92 @@ public class ConversationsListController extends BaseController implements Searc
 
         searchView = (SearchView) MenuItemCompat.getActionView(searchItem);
 
-        MainActivity activity = (MainActivity) getActivity();
+        showShareToScreen = !showShareToScreen && hasActivityActionSendIntent();
 
-        searchItem.setVisible(callItems.size() > 0);
-        if (adapter.hasFilter()) {
-            showSearchView(activity, searchView, searchItem);
-            searchView.setQuery(adapter.getFilter(String.class), false);
-        }
 
-        if (activity != null) {
-            activity.getSearchInputText().setOnClickListener(v -> {
-                showSearchView(activity, searchView, searchItem);
-                if (getResources() != null) {
-                    DisplayUtils.applyColorToStatusBar(
-                            activity,
-                            ResourcesCompat.getColor(getResources(), R.color.appbar, null)
-                                                      );
+        if (showShareToScreen) {
+            hideSearchBar();
+            getActionBar().setTitle(R.string.send_to_three_dots);
+        } else if (forwardMessage) {
+            hideSearchBar();
+            getActionBar().setTitle(R.string.nc_forward_to_three_dots);
+        } else {
+            MainActivity activity = (MainActivity) getActivity();
+
+            searchItem.setVisible(callItems.size() > 0);
+            if (activity != null) {
+                if (adapter.hasFilter()) {
+                    showSearchView(activity, searchView, searchItem);
+                    searchView.setQuery(adapter.getFilter(String.class), false);
                 }
-            });
-        }
 
-        searchView.setOnCloseListener(() -> {
-            if (TextUtils.isEmpty(searchView.getQuery().toString())) {
-                searchView.onActionViewCollapsed();
-                if (activity != null && getResources() != null) {
-                    DisplayUtils.applyColorToStatusBar(
-                            activity,
-                            ResourcesCompat.getColor(getResources(), R.color.bg_default, null)
-                                                      );
-                }
-            } else {
-                searchView.post(() -> searchView.setQuery("", true));
-            }
-            return true;
-        });
-
-        searchItem.setOnActionExpandListener(new MenuItem.OnActionExpandListener() {
-            @Override
-            public boolean onMenuItemActionExpand(MenuItem item) {
-                return true;
-            }
-
-            @Override
-            public boolean onMenuItemActionCollapse(MenuItem item) {
-                searchView.onActionViewCollapsed();
-                MainActivity activity = (MainActivity) getActivity();
-                if (activity != null) {
-                    activity.appBar.setStateListAnimator(AnimatorInflater.loadStateListAnimator(
-                            activity.appBar.getContext(),
-                            R.animator.appbar_elevation_off)
-                                                        );
-                    activity.toolbar.setVisibility(View.GONE);
-                    activity.searchCardView.setVisibility(View.VISIBLE);
+                activity.binding.searchText.setOnClickListener(v -> {
+                    showSearchView(activity, searchView, searchItem);
                     if (getResources() != null) {
+                        DisplayUtils.applyColorToStatusBar(
+                                activity,
+                                ResourcesCompat.getColor(getResources(), R.color.appbar, null)
+                                                          );
+                    }
+                });
+            }
+
+            searchView.setOnCloseListener(() -> {
+                if (TextUtils.isEmpty(searchView.getQuery().toString())) {
+                    searchView.onActionViewCollapsed();
+                    if (activity != null && getResources() != null) {
                         DisplayUtils.applyColorToStatusBar(
                                 activity,
                                 ResourcesCompat.getColor(getResources(), R.color.bg_default, null)
                                                           );
                     }
-                }
-                SmoothScrollLinearLayoutManager layoutManager =
-                        (SmoothScrollLinearLayoutManager) recyclerView.getLayoutManager();
-                if (layoutManager != null) {
-                    layoutManager.scrollToPositionWithOffset(0, 0);
+                } else {
+                    searchView.post(() -> searchView.setQuery(TAG, true));
                 }
                 return true;
-            }
-        });
+            });
+
+            searchItem.setOnActionExpandListener(new MenuItem.OnActionExpandListener() {
+                @Override
+                public boolean onMenuItemActionExpand(MenuItem item) {
+                    return true;
+                }
+
+                @Override
+                public boolean onMenuItemActionCollapse(MenuItem item) {
+                    searchView.onActionViewCollapsed();
+                    MainActivity activity = (MainActivity) getActivity();
+                    if (activity != null) {
+                        activity.binding.appBar.setStateListAnimator(AnimatorInflater.loadStateListAnimator(
+                                activity.binding.appBar.getContext(),
+                                R.animator.appbar_elevation_off)
+                                                                    );
+                        activity.binding.toolbar.setVisibility(View.GONE);
+                        activity.binding.searchToolbar.setVisibility(View.VISIBLE);
+                        if (getResources() != null) {
+                            DisplayUtils.applyColorToStatusBar(
+                                    activity,
+                                    ResourcesCompat.getColor(getResources(), R.color.bg_default, null)
+                                                              );
+                        }
+                    }
+                    SmoothScrollLinearLayoutManager layoutManager =
+                            (SmoothScrollLinearLayoutManager) recyclerView.getLayoutManager();
+                    if (layoutManager != null) {
+                        layoutManager.scrollToPositionWithOffset(0, 0);
+                    }
+                    return true;
+                }
+            });
+        }
+    }
+
+    private boolean hasActivityActionSendIntent() {
+        if (getActivity() != null) {
+            return Intent.ACTION_SEND.equals(getActivity().getIntent().getAction())
+                    || Intent.ACTION_SEND_MULTIPLE.equals(getActivity().getIntent().getAction());
+        }
+        return false;
     }
 
     protected void showSearchOrToolbar() {
@@ -401,11 +441,11 @@ public class ConversationsListController extends BaseController implements Searc
     }
 
     public void showSearchView(MainActivity activity, SearchView searchView, MenuItem searchItem) {
-        activity.appBar.setStateListAnimator(AnimatorInflater.loadStateListAnimator(
-                activity.appBar.getContext(),
+        activity.binding.appBar.setStateListAnimator(AnimatorInflater.loadStateListAnimator(
+                activity.binding.appBar.getContext(),
                 R.animator.appbar_elevation_on));
-        activity.toolbar.setVisibility(View.VISIBLE);
-        activity.searchCardView.setVisibility(View.GONE);
+        activity.binding.toolbar.setVisibility(View.VISIBLE);
+        activity.binding.searchToolbar.setVisibility(View.GONE);
         searchItem.expandActionView();
     }
 
@@ -417,7 +457,7 @@ public class ConversationsListController extends BaseController implements Searc
 
         callItems = new ArrayList<>();
 
-        int apiVersion = ApiUtils.getConversationApiVersion(currentUser, new int[] {ApiUtils.APIv4, ApiUtils.APIv3, 1});
+        int apiVersion = ApiUtils.getConversationApiVersion(currentUser, new int[]{ApiUtils.APIv4, ApiUtils.APIv3, 1});
 
         roomsQueryDisposable = ncApi.getRooms(credentials, ApiUtils.getUrlForRooms(apiVersion,
                                                                                    currentUser.getBaseUrl()))
@@ -451,6 +491,12 @@ public class ConversationsListController extends BaseController implements Searc
                     Conversation conversation;
                     for (int i = 0; i < roomsOverall.getOcs().getData().size(); i++) {
                         conversation = roomsOverall.getOcs().getData().get(i);
+
+                        if (bundle.containsKey(BundleKeys.INSTANCE.getKEY_FORWARD_HIDE_SOURCE_ROOM()) && conversation.roomId.equals(bundle.getString(
+                            BundleKeys.INSTANCE.getKEY_FORWARD_HIDE_SOURCE_ROOM()))) {
+                            continue;
+                        }
+
                         if (shouldUseLastMessageLayout) {
                             if (getActivity() != null) {
                                 ConversationItem conversationItem = new ConversationItem(conversation
@@ -463,7 +509,7 @@ public class ConversationsListController extends BaseController implements Searc
                         }
                     }
 
-                    if (currentUser.hasSpreedFeatureCapability("last-room-activity")) {
+                    if (CapabilitiesUtil.hasSpreedFeatureCapability(currentUser, "last-room-activity")) {
                         Collections.sort(callItems, (o1, o2) -> {
                             Conversation conversation1 = ((ConversationItem) o1).getModel();
                             Conversation conversation2 = ((ConversationItem) o2).getModel();
@@ -479,6 +525,7 @@ public class ConversationsListController extends BaseController implements Searc
                     }
 
                     adapter.updateDataSet(callItems, false);
+                    new Handler().postDelayed(this::checkToShowUnreadBubble, UNREAD_BUBBLE_DELAY);
 
                     if (swipeRefreshLayout != null) {
                         swipeRefreshLayout.setRefreshing(false);
@@ -528,12 +575,19 @@ public class ConversationsListController extends BaseController implements Searc
     }
 
     private void prepareViews() {
-        SmoothScrollLinearLayoutManager layoutManager =
-                new SmoothScrollLinearLayoutManager(getActivity());
+        layoutManager = new SmoothScrollLinearLayoutManager(Objects.requireNonNull(getActivity()));
         recyclerView.setLayoutManager(layoutManager);
         recyclerView.setHasFixedSize(true);
-
         recyclerView.setAdapter(adapter);
+        recyclerView.addOnScrollListener(new RecyclerView.OnScrollListener() {
+            @Override
+            public void onScrollStateChanged(@NotNull RecyclerView recyclerView, int newState) {
+                super.onScrollStateChanged(recyclerView, newState);
+                if (newState == RecyclerView.SCROLL_STATE_IDLE) {
+                    checkToShowUnreadBubble();
+                }
+            }
+        });
 
         swipeRefreshLayout.setOnRefreshListener(() -> fetchData(false));
         swipeRefreshLayout.setColorSchemeResources(R.color.colorPrimary);
@@ -545,39 +599,51 @@ public class ConversationsListController extends BaseController implements Searc
             showNewConversationsScreen();
         });
 
-        fastScroller.addOnScrollStateChangeListener(this);
-        adapter.setFastScroller(fastScroller);
-
-        fastScroller.setBubbleTextCreator(position -> {
-            String displayName;
-            if (shouldUseLastMessageLayout) {
-                displayName = ((ConversationItem) adapter.getItem(position)).getModel().getDisplayName();
-            } else {
-                displayName = ((CallItem) adapter.getItem(position)).getModel().getDisplayName();
-            }
-
-            if (displayName.length() > 8) {
-                displayName = displayName.substring(0, 4) + "...";
-            }
-            return displayName;
-        });
-
         if (getActivity() != null && getActivity() instanceof MainActivity) {
             MainActivity activity = (MainActivity) getActivity();
 
-            if (activity.settingsButton != null) {
-                activity.settingsButton.setOnClickListener(v -> {
-                    if (getResources() != null && getResources().getBoolean(R.bool.multiaccount_support)) {
-                        DialogFragment newFragment = ChooseAccountDialogFragment.newInstance();
-                        newFragment.show(((MainActivity) getActivity()).getSupportFragmentManager(),
-                                         "ChooseAccountDialogFragment");
-                    } else {
-                        getRouter().pushController((RouterTransaction.with(new SettingsController())
-                                .pushChangeHandler(new HorizontalChangeHandler())
-                                .popChangeHandler(new HorizontalChangeHandler())));
-                    }
-                });
+            activity.binding.switchAccountButton.setOnClickListener(v -> {
+                if (getResources() != null && getResources().getBoolean(R.bool.multiaccount_support)) {
+                    DialogFragment newFragment = ChooseAccountDialogFragment.newInstance();
+                    newFragment.show(((MainActivity) getActivity()).getSupportFragmentManager(),
+                                     "ChooseAccountDialogFragment");
+                } else {
+                    getRouter().pushController((RouterTransaction.with(new SettingsController())
+                            .pushChangeHandler(new HorizontalChangeHandler())
+                            .popChangeHandler(new HorizontalChangeHandler())));
+                }
+            });
+        }
+
+        newMentionPopupBubble.hide();
+        newMentionPopupBubble.setPopupBubbleListener(new PopupBubble.PopupBubbleClickListener() {
+            @Override
+            public void bubbleClicked(Context context) {
+                recyclerView.smoothScrollToPosition(callItems.size());
             }
+        });
+    }
+
+    private void checkToShowUnreadBubble() {
+        try {
+            int lastVisibleItem = layoutManager.findLastCompletelyVisibleItemPosition();
+            for (AbstractFlexibleItem flexItem : callItems) {
+                Conversation conversationItem = ((ConversationItem) flexItem).getModel();
+                int position = adapter.getGlobalPositionOf(flexItem);
+                if ((conversationItem.unreadMention ||
+                    (conversationItem.unreadMessages > 0 &&
+                        conversationItem.type == Conversation.ConversationType.ROOM_TYPE_ONE_TO_ONE_CALL)) &&
+                    position > lastVisibleItem) {
+                    if (!newMentionPopupBubble.isShown()) {
+                        newMentionPopupBubble.show();
+                    }
+                    return;
+                }
+            }
+            newMentionPopupBubble.hide();
+        } catch (NullPointerException e) {
+            Log.d(TAG, "A NPE was caught when trying to show the unread popup bubble. This might happen when the " +
+                "user already left the conversations-list screen so the popup bubble is not available anymore.", e);
         }
     }
 
@@ -711,49 +777,87 @@ public class ConversationsListController extends BaseController implements Searc
 
     @Override
     protected String getTitle() {
-        return getResources().getString(R.string.nc_app_name);
-    }
-
-    @Override
-    public void onFastScrollerStateChange(boolean scrolling) {
-        swipeRefreshLayout.setEnabled(!scrolling);
+        return getResources().getString(R.string.nc_app_product_name);
     }
 
     @Override
     public boolean onItemClick(View view, int position) {
-        Object clickedItem = adapter.getItem(position);
-        if (clickedItem != null && getActivity() != null) {
-            Conversation conversation;
-            if (shouldUseLastMessageLayout) {
-                conversation = ((ConversationItem) clickedItem).getModel();
+        selectedConversation = getConversation(position);
+        if (selectedConversation != null && getActivity() != null) {
+            if (showShareToScreen) {
+                handleSharedData();
+                showShareToScreen = false;
+            } else if (forwardMessage) {
+                openConversation(bundle.getString(BundleKeys.INSTANCE.getKEY_FORWARD_MSG_TEXT()));
+                forwardMessage = false;
             } else {
-                conversation = ((CallItem) clickedItem).getModel();
-            }
-
-            Bundle bundle = new Bundle();
-            bundle.putParcelable(BundleKeys.INSTANCE.getKEY_USER_ENTITY(), currentUser);
-            bundle.putString(BundleKeys.INSTANCE.getKEY_ROOM_TOKEN(), conversation.getToken());
-            bundle.putString(BundleKeys.INSTANCE.getKEY_ROOM_ID(), conversation.getRoomId());
-
-            if (conversation.hasPassword && (conversation.participantType.equals(Participant.ParticipantType.GUEST) ||
-                    conversation.participantType.equals(Participant.ParticipantType.USER_FOLLOWING_LINK))) {
-                bundle.putInt(BundleKeys.INSTANCE.getKEY_OPERATION_CODE(), 99);
-                prepareAndShowBottomSheetWithBundle(bundle, false);
-            } else {
-                currentUser = userUtils.getCurrentUser();
-
-                bundle.putParcelable(BundleKeys.INSTANCE.getKEY_ACTIVE_CONVERSATION(), Parcels.wrap(conversation));
-                ConductorRemapping.INSTANCE.remapChatController(getRouter(), currentUser.getId(),
-                                                                conversation.getToken(), bundle, false);
+                openConversation();
             }
         }
-
         return true;
+    }
+
+    private void handleSharedData() {
+        collectDataFromIntent();
+        if (!textToPaste.isEmpty()) {
+            openConversation(textToPaste);
+        } else if (filesToShare != null && !filesToShare.isEmpty()) {
+            showSendFilesConfirmDialog();
+        } else {
+            Toast.makeText(context, context.getResources().getString(R.string.nc_common_error_sorry), Toast.LENGTH_LONG).show();
+        }
+    }
+
+    private void showSendFilesConfirmDialog() {
+        if (UploadAndShareFilesWorker.Companion.isStoragePermissionGranted(context)) {
+            StringBuilder fileNamesWithLineBreaks = new StringBuilder("\n");
+
+            for (String file : filesToShare) {
+                String filename = UriUtils.Companion.getFileName(Uri.parse(file), context);
+                fileNamesWithLineBreaks.append(filename).append("\n");
+            }
+
+            String confirmationQuestion;
+            if (filesToShare.size() == 1) {
+                confirmationQuestion =
+                        String.format(getResources().getString(R.string.nc_upload_confirm_send_single),
+                                      selectedConversation.getDisplayName());
+            } else {
+                confirmationQuestion =
+                        String.format(getResources().getString(R.string.nc_upload_confirm_send_multiple),
+                                      selectedConversation.getDisplayName());
+            }
+
+            new LovelyStandardDialog(getActivity())
+                    .setPositiveButtonColorRes(R.color.nc_darkGreen)
+                    .setTitle(confirmationQuestion)
+                    .setMessage(fileNamesWithLineBreaks.toString())
+                    .setPositiveButton(R.string.nc_yes, new View.OnClickListener() {
+                        @Override
+                        public void onClick(View v) {
+                            upload();
+                            openConversation();
+                        }
+                    })
+                    .setNegativeButton(R.string.nc_no, new View.OnClickListener() {
+                        @Override
+                        public void onClick(View v) {
+                            Log.d(TAG, "sharing files aborted");
+                        }
+                    })
+                    .show();
+        } else {
+            UploadAndShareFilesWorker.Companion.requestStoragePermission(ConversationsListController.this);
+        }
     }
 
     @Override
     public void onItemLongClick(int position) {
-        if (currentUser.hasSpreedFeatureCapability("last-room-activity")) {
+
+        if (showShareToScreen) {
+            Log.d(TAG, "sharing to multiple rooms not yet implemented. onItemLongClick is ignored.");
+
+        } else if (CapabilitiesUtil.hasSpreedFeatureCapability(currentUser, "last-room-activity")) {
             Object clickedItem = adapter.getItem(position);
             if (clickedItem != null) {
                 Conversation conversation;
@@ -767,6 +871,134 @@ public class ConversationsListController extends BaseController implements Searc
                 onMessageEvent(moreMenuClickEvent);
             }
         }
+    }
+
+    private void collectDataFromIntent() {
+        filesToShare = new ArrayList<>();
+        if (getActivity() != null && getActivity().getIntent() != null) {
+            Intent intent = getActivity().getIntent();
+            if (Intent.ACTION_SEND.equals(intent.getAction())
+                    || Intent.ACTION_SEND_MULTIPLE.equals(intent.getAction())) {
+                try {
+                    String mimeType = intent.getType();
+                    if ("text/plain".equals(mimeType) && (intent.getStringExtra(Intent.EXTRA_TEXT) != null)) {
+                        // Share from Google Chrome sets text/plain MIME type, but also provides a content:// URI
+                        // with a *screenshot* of the current page in getClipData().
+                        // Here we assume that when sharing a web page the user would prefer to send the URL
+                        // of the current page rather than a screenshot.
+                        textToPaste = intent.getStringExtra(Intent.EXTRA_TEXT);
+                    } else {
+                        if (intent.getClipData() != null) {
+                            for (int i = 0; i < intent.getClipData().getItemCount(); i++) {
+                                ClipData.Item item = intent.getClipData().getItemAt(i);
+                                if (item.getUri() != null) {
+                                    filesToShare.add(item.getUri().toString());
+                                } else if (item.getText() != null) {
+                                    textToPaste = item.getText().toString();
+                                    break;
+                                } else {
+                                    Log.w(TAG, "datatype not yet implemented for share-to");
+                                }
+                            }
+                        } else {
+                            filesToShare.add(intent.getData().toString());
+                        }
+                    }
+                    if (filesToShare.isEmpty() && textToPaste.isEmpty()) {
+                        Toast.makeText(context, context.getResources().getString(R.string.nc_common_error_sorry),
+                                       Toast.LENGTH_LONG).show();
+                        Log.e(TAG, "failed to get data from intent");
+                    }
+                } catch (Exception e) {
+                    Toast.makeText(context, context.getResources().getString(R.string.nc_common_error_sorry),
+                                   Toast.LENGTH_LONG).show();
+                    Log.e(TAG, "Something went wrong when extracting data from intent");
+                }
+            }
+        }
+    }
+
+    private void upload() {
+        if (selectedConversation == null) {
+            Toast.makeText(context, context.getResources().getString(R.string.nc_common_error_sorry),
+                           Toast.LENGTH_LONG).show();
+            Log.e(TAG, "not able to upload any files because conversation was null.");
+            return;
+        }
+
+        try {
+            String[] filesToShareArray = new String[filesToShare.size()];
+            filesToShareArray = filesToShare.toArray(filesToShareArray);
+
+            Data data = new Data.Builder()
+                    .putStringArray(UploadAndShareFilesWorker.DEVICE_SOURCEFILES, filesToShareArray)
+                    .putString(
+                            UploadAndShareFilesWorker.NC_TARGETPATH,
+                            CapabilitiesUtil.getAttachmentFolder(currentUser))
+                    .putString(UploadAndShareFilesWorker.ROOM_TOKEN, selectedConversation.getToken())
+                    .build();
+            OneTimeWorkRequest uploadWorker = new OneTimeWorkRequest.Builder(UploadAndShareFilesWorker.class)
+                    .setInputData(data)
+                    .build();
+            WorkManager.getInstance().enqueue(uploadWorker);
+
+            Toast.makeText(
+                    context, context.getResources().getString(R.string.nc_upload_in_progess),
+                    Toast.LENGTH_LONG
+                          ).show();
+
+        } catch (IllegalArgumentException e) {
+            Toast.makeText(context, context.getResources().getString(R.string.nc_upload_failed), Toast.LENGTH_LONG).show();
+            Log.e(TAG, "Something went wrong when trying to upload file", e);
+        }
+    }
+
+    @Override
+    public void onRequestPermissionsResult(int requestCode, String[] permissions, int[] grantResults) {
+        if (requestCode == UploadAndShareFilesWorker.REQUEST_PERMISSION &&
+                grantResults.length > 0 &&
+                grantResults[0] == PackageManager.PERMISSION_GRANTED) {
+            Log.d(TAG, "upload starting after permissions were granted");
+            showSendFilesConfirmDialog();
+        } else {
+            Toast.makeText(context, context.getString(R.string.read_storage_no_permission), Toast.LENGTH_LONG).show();
+        }
+    }
+
+    private void openConversation() {
+        openConversation("");
+    }
+
+    private void openConversation(String textToPaste) {
+        Bundle bundle = new Bundle();
+        bundle.putParcelable(BundleKeys.INSTANCE.getKEY_USER_ENTITY(), currentUser);
+        bundle.putString(BundleKeys.INSTANCE.getKEY_ROOM_TOKEN(), selectedConversation.getToken());
+        bundle.putString(BundleKeys.INSTANCE.getKEY_ROOM_ID(), selectedConversation.getRoomId());
+        bundle.putString(BundleKeys.INSTANCE.getKEY_SHARED_TEXT(), textToPaste);
+
+        if (selectedConversation.hasPassword && selectedConversation.participantType ==
+                Participant.ParticipantType.GUEST ||
+                selectedConversation.participantType == Participant.ParticipantType.USER_FOLLOWING_LINK) {
+            bundle.putInt(BundleKeys.INSTANCE.getKEY_OPERATION_CODE(), 99);
+            prepareAndShowBottomSheetWithBundle(bundle, false);
+        } else {
+            currentUser = userUtils.getCurrentUser();
+
+            bundle.putParcelable(BundleKeys.INSTANCE.getKEY_ACTIVE_CONVERSATION(), Parcels.wrap(selectedConversation));
+            ConductorRemapping.INSTANCE.remapChatController(getRouter(), currentUser.getId(),
+                                                            selectedConversation.getToken(), bundle, false);
+        }
+    }
+
+    private Conversation getConversation(int position) {
+        Object clickedItem = adapter.getItem(position);
+        Conversation conversation;
+        if (shouldUseLastMessageLayout) {
+            conversation = ((ConversationItem) clickedItem).getModel();
+        } else {
+            conversation = ((CallItem) clickedItem).getModel();
+        }
+        return conversation;
     }
 
     @Subscribe(sticky = true, threadMode = ThreadMode.BACKGROUND)

@@ -2,6 +2,10 @@
  * Nextcloud Talk application
  *
  * @author Mario Danic
+ * @author Andy Scherzinger
+ * @author Tim Krüger
+ * Copyright (C) 2021 Andy Scherzinger <info@andy-scherzinger.de>
+ * Copyright (C) 2021 Tim Krüger <t@timkrueger.me>
  * Copyright (C) 2017 Mario Danic <mario@lovelyhq.com>
  *
  * This program is free software: you can redistribute it and/or modify
@@ -21,7 +25,15 @@
 package com.nextcloud.talk.utils.preferences;
 
 import com.nextcloud.talk.R;
-import net.orange_box.storebox.annotations.method.*;
+import com.nextcloud.talk.utils.FileSortOrder;
+
+import net.orange_box.storebox.annotations.method.ClearMethod;
+import net.orange_box.storebox.annotations.method.DefaultValue;
+import net.orange_box.storebox.annotations.method.KeyByResource;
+import net.orange_box.storebox.annotations.method.KeyByString;
+import net.orange_box.storebox.annotations.method.RegisterChangeListenerMethod;
+import net.orange_box.storebox.annotations.method.RemoveMethod;
+import net.orange_box.storebox.annotations.method.UnregisterChangeListenerMethod;
 import net.orange_box.storebox.annotations.option.SaveOption;
 import net.orange_box.storebox.enums.SaveMode;
 import net.orange_box.storebox.listeners.OnPreferenceValueChangedListener;
@@ -234,10 +246,6 @@ public interface AppPreferences {
     @KeyByString("incognito_keyboard")
     @RemoveMethod
     void removeIncognitoKeyboard();
-
-    @KeyByString("link_previews")
-    @DefaultValue(R.bool.value_true)
-    boolean getAreLinkPreviewsAllowed();
     
     @KeyByString("phone_book_integration")
     @DefaultValue(R.bool.value_false)
@@ -246,9 +254,7 @@ public interface AppPreferences {
     @KeyByString("phone_book_integration") 
     void setPhoneBookIntegration(boolean value);
 
-    @KeyByString("link_previews")
-    void setLinkPreviewsAllowed(boolean value);
-
+    // TODO: Remove in 13.0.0
     @KeyByString("link_previews")
     @RemoveMethod
     void removeLinkPreviews();
@@ -312,6 +318,21 @@ public interface AppPreferences {
     @KeyByResource(R.string.nc_settings_read_privacy_key)
     @UnregisterChangeListenerMethod
     void unregisterReadPrivacyChangeListener(OnPreferenceValueChangedListener<Boolean> listener);
+
+    @KeyByResource(R.string.nc_file_browser_sort_by_key)
+    void setSorting(String value);
+
+    @KeyByResource(R.string.nc_file_browser_sort_by_key)
+    @DefaultValue(R.string.nc_file_browser_sort_by_default)
+    String getSorting();
+
+    @KeyByResource(R.string.nc_file_browser_sort_by_key)
+    @RegisterChangeListenerMethod
+    void registerSortingChangeListener(OnPreferenceValueChangedListener<String> listener);
+
+    @KeyByResource(R.string.nc_file_browser_sort_by_key)
+    @UnregisterChangeListenerMethod
+    void unregisterSortingChangeListener(OnPreferenceValueChangedListener<String> listener);
 
     @ClearMethod
     void clear();

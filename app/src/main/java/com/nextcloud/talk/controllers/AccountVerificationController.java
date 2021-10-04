@@ -29,12 +29,7 @@ import android.view.LayoutInflater;
 import android.view.View;
 import android.view.ViewGroup;
 import android.widget.TextView;
-import androidx.annotation.NonNull;
-import androidx.work.Data;
-import androidx.work.OneTimeWorkRequest;
-import androidx.work.WorkManager;
-import autodagger.AutoInjector;
-import butterknife.BindView;
+
 import com.bluelinelabs.conductor.RouterTransaction;
 import com.bluelinelabs.conductor.changehandler.HorizontalChangeHandler;
 import com.nextcloud.talk.R;
@@ -48,7 +43,6 @@ import com.nextcloud.talk.jobs.SignalingSettingsWorker;
 import com.nextcloud.talk.models.database.UserEntity;
 import com.nextcloud.talk.models.json.capabilities.CapabilitiesOverall;
 import com.nextcloud.talk.models.json.generic.Status;
-import com.nextcloud.talk.models.json.conversations.RoomsOverall;
 import com.nextcloud.talk.models.json.userprofile.UserProfileOverall;
 import com.nextcloud.talk.utils.ApiUtils;
 import com.nextcloud.talk.utils.ClosedInterfaceImpl;
@@ -57,19 +51,27 @@ import com.nextcloud.talk.utils.database.user.UserUtils;
 import com.nextcloud.talk.utils.preferences.AppPreferences;
 import com.nextcloud.talk.utils.singletons.ApplicationWideMessageHolder;
 
+import org.greenrobot.eventbus.EventBus;
+import org.greenrobot.eventbus.Subscribe;
+import org.greenrobot.eventbus.ThreadMode;
+
+import java.net.CookieManager;
+import java.util.ArrayList;
+import java.util.List;
+
+import javax.inject.Inject;
+
+import androidx.annotation.NonNull;
+import androidx.work.Data;
+import androidx.work.OneTimeWorkRequest;
+import androidx.work.WorkManager;
+import autodagger.AutoInjector;
+import butterknife.BindView;
 import io.reactivex.CompletableObserver;
 import io.reactivex.Observer;
 import io.reactivex.android.schedulers.AndroidSchedulers;
 import io.reactivex.disposables.Disposable;
 import io.reactivex.schedulers.Schedulers;
-import org.greenrobot.eventbus.EventBus;
-import org.greenrobot.eventbus.Subscribe;
-import org.greenrobot.eventbus.ThreadMode;
-
-import javax.inject.Inject;
-import java.net.CookieManager;
-import java.util.ArrayList;
-import java.util.List;
 
 
 @AutoInjector(NextcloudTalkApplication.class)
@@ -242,8 +244,10 @@ public class AccountVerificationController extends BaseController {
                             fetchProfile(credentials);
                         } else {
                             if (getActivity() != null && getResources() != null) {
-                                getActivity().runOnUiThread(() -> progressText.setText(String.format(getResources().getString(
-                                        R.string.nc_nextcloud_talk_app_not_installed), getResources().getString(R.string.nc_app_name))));
+                                getActivity().runOnUiThread(() -> progressText.setText(
+                                        String.format(
+                                                getResources().getString(R.string.nc_nextcloud_talk_app_not_installed),
+                                                getResources().getString(R.string.nc_app_product_name))));
                             }
 
                             ApplicationWideMessageHolder.getInstance().setMessageType(
@@ -256,8 +260,10 @@ public class AccountVerificationController extends BaseController {
                     @Override
                     public void onError(Throwable e) {
                         if (getActivity() != null && getResources() != null) {
-                            getActivity().runOnUiThread(() -> progressText.setText(String.format(getResources().getString(
-                                    R.string.nc_nextcloud_talk_app_not_installed), getResources().getString(R.string.nc_app_name))));
+                            getActivity().runOnUiThread(() -> progressText.setText(
+                                    String.format(
+                                            getResources().getString(R.string.nc_nextcloud_talk_app_not_installed),
+                                            getResources().getString(R.string.nc_app_product_name))));
                         }
 
                         ApplicationWideMessageHolder.getInstance().setMessageType(
@@ -437,7 +443,7 @@ public class AccountVerificationController extends BaseController {
             getActivity().runOnUiThread(() -> {
                 if (userUtils.getUsers().size() == 1) {
                     getRouter().setRoot(RouterTransaction.with(new
-                            ConversationsListController())
+                            ConversationsListController(new Bundle()))
                             .pushChangeHandler(new HorizontalChangeHandler())
                             .popChangeHandler(new HorizontalChangeHandler()));
                 } else {
@@ -518,7 +524,7 @@ public class AccountVerificationController extends BaseController {
 
                     } else {
                         if (userUtils.anyUserExists()) {
-                            getRouter().setRoot(RouterTransaction.with(new ConversationsListController())
+                            getRouter().setRoot(RouterTransaction.with(new ConversationsListController(new Bundle()))
                                     .pushChangeHandler(new HorizontalChangeHandler())
                                     .popChangeHandler(new HorizontalChangeHandler()));
                         } else {

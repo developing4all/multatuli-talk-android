@@ -22,6 +22,7 @@ package com.nextcloud.talk.models.json.conversations;
 
 import com.bluelinelabs.logansquare.annotation.JsonField;
 import com.bluelinelabs.logansquare.annotation.JsonObject;
+import com.nextcloud.talk.models.database.CapabilitiesUtil;
 import com.nextcloud.talk.models.database.UserEntity;
 import com.nextcloud.talk.models.json.chat.ChatMessage;
 import com.nextcloud.talk.models.json.converters.EnumLobbyStateConverter;
@@ -97,6 +98,9 @@ public class Conversation {
     @JsonField(name = "canDeleteConversation")
     public Boolean canDeleteConversation;
 
+    @JsonField(name = "unreadMentionDirect")
+    public Boolean unreadMentionDirect;
+
     public boolean isPublic() {
         return (ConversationType.ROOM_PUBLIC_CALL.equals(type));
     }
@@ -108,7 +112,8 @@ public class Conversation {
     }
 
     private boolean isLockedOneToOne(UserEntity conversationUser) {
-        return (getType() == ConversationType.ROOM_TYPE_ONE_TO_ONE_CALL && conversationUser.hasSpreedFeatureCapability("locked-one-to-one-rooms"));
+        return (getType() == ConversationType.ROOM_TYPE_ONE_TO_ONE_CALL &&
+                CapabilitiesUtil.hasSpreedFeatureCapability(conversationUser, "locked-one-to-one-rooms"));
     }
 
     public boolean canModerate(UserEntity conversationUser) {
@@ -252,6 +257,10 @@ public class Conversation {
         return this.callFlag;
     }
 
+    public Boolean getUnreadMentionDirect() {
+        return unreadMentionDirect;
+    }
+
     public void setRoomId(String roomId) {
         this.roomId = roomId;
     }
@@ -355,6 +364,10 @@ public class Conversation {
 
     public void setCallFlag(int callFlag) {
         this.callFlag = callFlag;
+    }
+
+    public void setUnreadMentionDirect(Boolean unreadMentionDirect) {
+        this.unreadMentionDirect = unreadMentionDirect;
     }
 
     @Override

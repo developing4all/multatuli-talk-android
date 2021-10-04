@@ -20,7 +20,7 @@
   ~ along with this program.  If not, see <http://www.gnu.org/licenses/>.
   -->
 
-<resources xmlns:tools="http://schemas.android.com/tools">
+<resources>
     <!-- Common -->
     <string name="nc_yes">Yes</string>
     <string name="nc_no">No</string>
@@ -66,25 +66,25 @@
     <string name="nc_certificate_error">Your SSL setup prevented connection</string>
 
     <!-- Settings -->
-    <string name="nc_settings_proxy_title">Proxy</string>
+    <string name="nc_settings_advanced_title">Advanced</string>
     <string name="nc_settings_proxy_type_key" translatable="false">proxy_type</string>
     <string name="nc_settings_proxy_type_title">Proxy type</string>
     <string name="nc_settings_proxy_host_key" translatable="false">proxy_host</string>
     <string name="nc_settings_proxy_host_title">Proxy host</string>
     <string name="nc_settings_proxy_port_key" translatable="false">proxy_port</string>
     <string name="nc_settings_proxy_port_title">Proxy port</string>
+    <string name="nc_settings_proxy_username_title">Proxy username</string>
     <string name="nc_settings_proxy_username_key" translatable="false">proxy_username</string>
+    <string name="nc_settings_proxy_password_title">Proxy password</string>
     <string name="nc_settings_proxy_password_key" translatable="false">proxy_password</string>
-    <string name="nc_settings_use_credentials_title">Use credentials</string>
+    <string name="nc_settings_use_credentials_title">Proxy requires credentials</string>
     <string name="nc_settings_use_credentials_key" translatable="false">proxy_credentials</string>
-    <string name="nc_settings_switch_account">Switch between accounts</string>
-    <string name="nc_settings_reauthorize">Reauthorize</string>
+    <string name="nc_settings_reauthorize">Reauthorize account</string>
     <string name="nc_client_cert_setup">Set up client certificate</string>
     <string name="nc_client_cert_change">Change client certificate</string>
     <string name="nc_settings_remove">Remove</string>
     <string name="nc_settings_remove_confirmation">Please confirm your intent to remove the current account.</string>
     <string name="nc_settings_remove_account">Remove account</string>
-    <string name="nc_settings_add_account">Add a new account</string>
     <string name="nc_settings_server_eol_title">Unsupported server</string>
     <string name="nc_settings_server_eol">The server version is too old and not supported by this version of the Android app</string>
     <string name="nc_settings_server_almost_eol">The server version is very old and will not be supported in the next release!</string>
@@ -128,9 +128,6 @@
     <string name="nc_settings_incognito_keyboard_title">Incognito keyboard</string>
     <string name="nc_settings_incognito_keyboard_desc">Instructs keyboard to disable personalized learning (without guarantees)</string>
     <string name="nc_settings_incognito_keyboard_key" translatable="false">incognito_keyboard</string>
-    <string name="nc_settings_link_previews_title">Show link previews</string>
-    <string name="nc_settings_link_previews_desc">Allows previews of content from received links for supported services</string>
-    <string name="nc_settings_link_previews_key" translatable="false">link_previews</string>
     <string name="nc_settings_read_privacy_key" translatable="false">read_privacy</string>
     <string name="nc_locked_tap_to_unlock">Tap to unlock</string>
     <string name="nc_locked">Locked</string>
@@ -150,7 +147,6 @@
     <string name="nc_cancel">Cancel</string>
 
     <string name="nc_no_proxy">No proxy</string>
-    <string name="nc_username">Username</string>
     <string name="nc_password">Password</string>
     <string name="nc_conversation_link">Conversation link</string>
     <string name="nc_new_password">New password</string>
@@ -171,6 +167,9 @@
     <string name="nc_start_conversation">Start a conversation</string>
     <string name="nc_configure_room">Configure conversation</string>
     <string name="nc_leave">Leave conversation</string>
+    <string name="nc_clear_history">Delete all messages</string>
+    <string name="nc_clear_history_warning">Do you really want to delete all messages in this conversation?</string>
+    <string name="nc_clear_history_success">All messages were deleted</string>
     <string name="nc_rename">Rename conversation</string>
     <string name="nc_set_password">Set a password</string>
     <string name="nc_change_password">Change password</string>
@@ -181,6 +180,7 @@
     <string name="nc_make_call_private">Make conversation private</string>
     <string name="nc_delete_call">Delete conversation</string>
     <string name="nc_delete">Delete</string>
+    <string name="nc_delete_all">Delete all</string>
     <string name="nc_delete_conversation_more">If you delete the conversation, it will also be deleted for all other participants.</string>
 
     <string name="nc_new_conversation">New conversation</string>
@@ -189,8 +189,11 @@
     <string name="nc_add_to_favorites">Add to favorites</string>
     <string name="nc_remove_from_favorites">Remove from favorites</string>
 
+    <string name="nc_forward_to_three_dots">Forward to …</string>
+
     <!-- Contacts -->
-    <string name="nc_select_contacts">Select contacts</string>
+    <string name="nc_select_participants">Select participants</string>
+    <string name="nc_add_participants">Add participants</string>
     <string name="nc_contacts_done">Done</string>
 
     <!-- Permissions -->
@@ -257,8 +260,12 @@
     <string name="nc_demote">Demote from moderator</string>
     <string name="nc_promote">Promote to moderator</string>
     <string name="nc_remove_participant">Remove participant</string>
+    <string name="nc_remove_circle_and_members">Remove circle and members</string>
     <string name="nc_remove_group_and_members">Remove group and members</string>
     <string name="nc_attendee_pin">Pin: %1$s</string>
+
+    <!-- Conversations List-->
+    <string name="nc_new_mention">More mentions</string>
 
     <!-- Chat -->
     <string name="nc_hint_enter_a_message">Enter a message…</string>
@@ -275,12 +282,16 @@
     <string name="nc_sent_an_audio" formatted="true">%1$s sent an audio.</string>
     <string name="nc_sent_a_video" formatted="true">%1$s sent a video.</string>
     <string name="nc_sent_an_image" formatted="true">%1$s sent an image.</string>
-    <string name="nc_sent_a_link_you" tools:ignore="ExtraTranslation">You sent a link.</string>
-    <string name="nc_sent_a_gif_you" tools:ignore="ExtraTranslation">You sent a GIF.</string>
+    <string name="nc_sent_location" formatted="true">%1$s sent a location.</string>
+    <string name="nc_sent_voice" formatted="true">%1$s sent a voice message.</string>
+    <string name="nc_sent_a_link_you">You sent a link.</string>
+    <string name="nc_sent_a_gif_you">You sent a GIF.</string>
     <string name="nc_sent_an_attachment_you">You sent an attachment.</string>
     <string name="nc_sent_an_audio_you">You sent an audio.</string>
     <string name="nc_sent_a_video_you">You sent a video.</string>
     <string name="nc_sent_an_image_you">You sent an image.</string>
+    <string name="nc_sent_location_you">You sent a location.</string>
+    <string name="nc_sent_voice_you">You sent a voice message.</string>
     <string name="nc_formatted_message" translatable="false">%1$s: %2$s</string>
     <string name="nc_message_quote_cancel_reply">Cancel reply</string>
     <!-- When translating to German, please use non-formal variant -->
@@ -311,7 +322,9 @@
     <string name="nc_limit_hit">%s characters limit has been hit</string>
     <string name="nc_email">Email</string>
     <string name="nc_group">Group</string>
+    <string name="nc_circle">Circle</string>
     <string name="nc_groups">Groups</string>
+    <string name="nc_circles">Circles</string>
     <string name="nc_participants">Participants</string>
     <string name="nc_participants_add">Add participants</string>
 
@@ -322,20 +335,26 @@
     <string name="nc_following_link">User following a public link</string>
 
     <!-- Browser component -->
-    <string name="nc_file_browser">File browser"</string>
-    <string name="nc_select_files">Select files</string>
     <string name="nc_file_browser_back">Back</string>
-    <string name="nc_file_browser_refresh">Refresh</string>
     <string name="nc_last_modified">%1$s | Last modified: %2$s</string>
     <string name="nc_file_browser_reshare_forbidden">You are not allowed to re-share this file</string>
+    <string name="nc_sort_by">Sort by</string>
+    <string name="nc_file_browser_sort_by_key" translatable="false">file_browser_sort_by</string>
+    <string name="nc_file_browser_sort_by_default" translatable="false">sort_a_to_z</string>
+    <string name="menu_item_sort_by_name_a_z">A - Z</string>
+    <string name="menu_item_sort_by_name_z_a">Z - A</string>
+    <string name="menu_item_sort_by_date_newest_first">Newest first</string>
+    <string name="menu_item_sort_by_date_oldest_first">Oldest first</string>
+    <string name="menu_item_sort_by_size_biggest_first">Biggest first</string>
+    <string name="menu_item_sort_by_size_smallest_first">Smallest first</string>
 
     <!-- Lobby -->
     <string name="nc_webinar">Webinar</string>
     <string name="nc_lobby">Lobby</string>
     <string name="nc_start_time">Start time</string>
     <string name="nc_lobby_waiting">You are currently waiting in the lobby.</string>
-    <string name="nc_lobby_waiting_with_date">You are currently waiting in the lobby.\n This
-        meeting is scheduled for %1$s.</string>
+    <string name="nc_lobby_start_date">This meeting is scheduled for %1$s</string>
+    <string name="nc_lobby_start_soon">The meeting will start soon</string>
     <string name="nc_manual">Not set</string>
 
     <!-- Errors -->
@@ -346,20 +365,22 @@
     <string name="nc_not_defined_error">Unknown error</string>
     <string name="nc_unauthorized_error">Unauthorized</string>
 
-    <string name="nc_general_settings">General</string>
     <string name="nc_allow_guests">Allow guests</string>
     <string name="nc_last_moderator_title">Could not leave conversation</string>
     <string name="nc_last_moderator">You need to promote a new moderator before you can leave %1$s.</string>
 
     <!-- Chat -->
-    <string name="nc_99_plus">99+</string>
     <string name="nc_copy_message">Copy</string>
+    <string name="nc_forward_message">Forward</string>
     <string name="nc_reply">Reply</string>
+    <string name="nc_reply_privately">Reply privately</string>
     <string name="nc_delete_message">Delete</string>
     <string name="nc_delete_message_leaked_to_matterbridge">Message deleted successfully, but it might have been leaked to other services</string>
 
     <string name="share">Share</string>
     <string name="send_to">Send to</string>
+    <string name="send_to_three_dots">Send to …</string>
+    <string name="read_storage_no_permission">Sharing files from storage is not possible without permissions</string>
     <string name="open_in_files_app">Open in Files app</string>
 
     <!-- Upload -->
@@ -371,6 +392,23 @@
     <string name="nc_upload_confirm_send_multiple">Send these files to %1$s?</string>
     <string name="nc_upload_confirm_send_single">Send this file to %1$s?</string>
     <string name="nc_upload_in_progess">Uploading</string>
+
+    <!-- location sharing -->
+    <string name="nc_share_location">Share location</string>
+    <string name="nc_location_permission_required">location permission is required</string>
+    <string name="nc_share_current_location">Share current location</string>
+    <string name="nc_share_this_location">Share this location</string>
+    <string name="nc_shared_location">Shared location</string>
+    <string name="nc_location_current_position_description">Your current location</string>
+    <string name="nc_location_unknown">Position unknown</string>
+
+    <!-- voice messages -->
+    <string name="nc_voice_message_filename">Talk recording from %1$s (%2$s)</string>
+    <string name="nc_voice_message_hold_to_record_info">Hold to record, release to send.</string>
+    <string name="nc_description_record_voice">Record voice message</string>
+    <string name="nc_voice_message_slide_to_cancel">« Slide to cancel</string>
+    <string name="play_pause_voice_message">Play/pause voice message</string>
+    <string name="nc_voice_message_missing_audio_permission">Permission for audio recording is required</string>
 
     <!-- Phonebook Integration -->
     <string name="nc_settings_phone_book_integration_key" translatable="false">phone_book_integration</string>
@@ -422,11 +460,12 @@
     <string name="appbar_search_in">Search in %s</string>
 
     <!-- Non-translatable strings -->
-    <string name="path_password_strike_through" translatable="false" tools:override="true">M3.27,4.27L19.74,20.74</string>
     <string name="tooManyUnreadMessages" translatable="false">999+</string>
+    <string name="replyable_message_view_tag" translatable="false">REPLYABLE_TAG</string>
+
     <string name="nc_action_open_main_menu">Open main menu</string>
     <string name="failed_to_save">Failed to save %1$s</string>
-    <string name="selected_list_item">selected</string>
+    <string name="selected_list_item">Selected</string>
     <string name="filename_progress">%1$s (%2$d)</string>
     <string name="nc_dialog_invalid_password">Invalid password</string>
     <string name="nc_dialog_reauth_or_delete">Do you want to reauthorize or delete this account?</string>

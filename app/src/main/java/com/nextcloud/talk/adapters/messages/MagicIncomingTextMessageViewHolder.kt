@@ -2,6 +2,8 @@
  * Nextcloud Talk application
  *
  * @author Mario Danic
+ * @author Andy Scherzinger
+ * Copyright (C) 2021 Andy Scherzinger <info@andy-scherzinger.de>
  * Copyright (C) 2017-2018 Mario Danic <mario@lovelyhq.com>
  *
  * This program is free software: you can redistribute it and/or modify
@@ -25,26 +27,24 @@ import android.content.Intent
 import android.graphics.drawable.Drawable
 import android.graphics.drawable.LayerDrawable
 import android.net.Uri
+import android.os.Build
 import android.text.Spannable
 import android.text.SpannableString
 import android.text.TextUtils
 import android.util.TypedValue
 import android.view.View
-import android.widget.ImageView
-import android.widget.RelativeLayout
-import android.widget.TextView
+import androidx.core.content.ContextCompat
+import androidx.core.content.res.ResourcesCompat
 import androidx.core.view.ViewCompat
-import androidx.emoji.widget.EmojiTextView
 import autodagger.AutoInjector
-import butterknife.BindView
-import butterknife.ButterKnife
 import coil.load
 import com.amulyakhare.textdrawable.TextDrawable
-import com.facebook.drawee.view.SimpleDraweeView
 import com.nextcloud.talk.R
 import com.nextcloud.talk.application.NextcloudTalkApplication
 import com.nextcloud.talk.application.NextcloudTalkApplication.Companion.sharedApplication
+import com.nextcloud.talk.databinding.ItemCustomIncomingTextMessageBinding
 import com.nextcloud.talk.models.json.chat.ChatMessage
+import com.nextcloud.talk.ui.recyclerview.MessageSwipeCallback
 import com.nextcloud.talk.utils.ApiUtils
 import com.nextcloud.talk.utils.DisplayUtils
 import com.nextcloud.talk.utils.TextMatchers
@@ -53,44 +53,10 @@ import com.stfalcon.chatkit.messages.MessageHolders
 import javax.inject.Inject
 
 @AutoInjector(NextcloudTalkApplication::class)
-class MagicIncomingTextMessageViewHolder(incomingView: View) : MessageHolders
-.IncomingTextMessageViewHolder<ChatMessage>(incomingView) {
+class MagicIncomingTextMessageViewHolder(itemView: View) : MessageHolders
+.IncomingTextMessageViewHolder<ChatMessage>(itemView) {
 
-    @JvmField
-    @BindView(R.id.messageAuthor)
-    var messageAuthor: EmojiTextView? = null
-
-    @JvmField
-    @BindView(R.id.messageText)
-    var messageText: EmojiTextView? = null
-
-    @JvmField
-    @BindView(R.id.messageUserAvatar)
-    var messageUserAvatarView: SimpleDraweeView? = null
-
-    @JvmField
-    @BindView(R.id.messageTime)
-    var messageTimeView: TextView? = null
-
-    @JvmField
-    @BindView(R.id.quotedChatMessageView)
-    var quotedChatMessageView: RelativeLayout? = null
-
-    @JvmField
-    @BindView(R.id.quotedMessageAuthor)
-    var quotedUserName: EmojiTextView? = null
-
-    @JvmField
-    @BindView(R.id.quotedMessageImage)
-    var quotedMessagePreview: ImageView? = null
-
-    @JvmField
-    @BindView(R.id.quotedMessage)
-    var quotedMessage: EmojiTextView? = null
-
-    @JvmField
-    @BindView(R.id.quoteColoredView)
-    var quoteColoredView: View? = null
+    private val binding: ItemCustomIncomingTextMessageBinding = ItemCustomIncomingTextMessageBinding.bind(itemView)
 
     @JvmField
     @Inject
@@ -100,33 +66,32 @@ class MagicIncomingTextMessageViewHolder(incomingView: View) : MessageHolders
     @Inject
     var appPreferences: AppPreferences? = null
 
-    init {
-        ButterKnife.bind(
-            this,
-            itemView
-        )
-    }
-
     override fun onBind(message: ChatMessage) {
         super.onBind(message)
         sharedApplication!!.componentApplication.inject(this)
         val author: String = message.actorDisplayName
         if (!TextUtils.isEmpty(author)) {
-            messageAuthor!!.text = author
+            binding.messageAuthor.text = author
         } else {
-            messageAuthor!!.setText(R.string.nc_nick_guest)
+            binding.messageAuthor.setText(R.string.nc_nick_guest)
         }
 
         if (!message.isGrouped && !message.isOneToOneConversation) {
-            messageUserAvatarView!!.visibility = View.VISIBLE
+            binding.messageUserAvatar.visibility = View.VISIBLE
             if (message.actorType == "guests") {
                 // do nothing, avatar is set
             } else if (message.actorType == "bots" && message.actorId == "changelog") {
-                val layers = arrayOfNulls<Drawable>(2)
-                layers[0] = context?.getDrawable(R.drawable.ic_launcher_background)
-                layers[1] = context?.getDrawable(R.drawable.ic_launcher_foreground)
-                val layerDrawable = LayerDrawable(layers)
-                messageUserAvatarView?.setImageDrawable(DisplayUtils.getRoundedDrawable(layerDrawable))
+                if (context != null) {
+                    if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+                        val layers = arrayOfNulls<Drawable>(2)
+                        layers[0] = ContextCompat.getDrawable(context!!, R.drawable.ic_launcher_background)
+                        layers[1] = ContextCompat.getDrawable(context!!, R.drawable.ic_launcher_foreground)
+                        val layerDrawable = LayerDrawable(layers)
+                        binding.messageUserAvatar.setImageDrawable(DisplayUtils.getRoundedDrawable(layerDrawable))
+                    } else {
+                        binding.messageUserAvatar.setImageResource(R.mipmap.ic_launcher)
+                    }
+                }
             } else if (message.actorType == "bots") {
                 val drawable = TextDrawable.builder()
                     .beginConfig()
@@ -134,26 +99,26 @@ class MagicIncomingTextMessageViewHolder(incomingView: View) : MessageHolders
                     .endConfig()
                     .buildRound(
                         ">",
-                        context!!.resources.getColor(R.color.black)
+                        ResourcesCompat.getColor(context!!.resources, R.color.black, null)
                     )
-                messageUserAvatarView!!.visibility = View.VISIBLE
-                messageUserAvatarView?.setImageDrawable(drawable)
+                binding.messageUserAvatar.visibility = View.VISIBLE
+                binding.messageUserAvatar.setImageDrawable(drawable)
             }
         } else {
             if (message.isOneToOneConversation) {
-                messageUserAvatarView!!.visibility = View.GONE
+                binding.messageUserAvatar.visibility = View.GONE
             } else {
-                messageUserAvatarView!!.visibility = View.INVISIBLE
+                binding.messageUserAvatar.visibility = View.INVISIBLE
             }
-            messageAuthor!!.visibility = View.GONE
+            binding.messageAuthor.visibility = View.GONE
         }
 
         val resources = itemView.resources
 
         val bgBubbleColor = if (message.isDeleted) {
-            resources.getColor(R.color.bg_message_list_incoming_bubble_deleted)
+            ResourcesCompat.getColor(resources, R.color.bg_message_list_incoming_bubble_deleted, null)
         } else {
-            resources.getColor(R.color.bg_message_list_incoming_bubble)
+            ResourcesCompat.getColor(resources, R.color.bg_message_list_incoming_bubble, null)
         }
 
         var bubbleResource = R.drawable.shape_incoming_message
@@ -164,7 +129,7 @@ class MagicIncomingTextMessageViewHolder(incomingView: View) : MessageHolders
 
         val bubbleDrawable = DisplayUtils.getMessageSelector(
             bgBubbleColor,
-            resources.getColor(R.color.transparent),
+            ResourcesCompat.getColor(resources, R.color.transparent, null),
             bgBubbleColor, bubbleResource
         )
         ViewCompat.setBackground(bubble, bubbleDrawable)
@@ -172,7 +137,7 @@ class MagicIncomingTextMessageViewHolder(incomingView: View) : MessageHolders
         val messageParameters = message.messageParameters
 
         itemView.isSelected = false
-        messageTimeView!!.setTextColor(context?.resources!!.getColor(R.color.warm_grey_four))
+        binding.messageTime.setTextColor(ResourcesCompat.getColor(resources, R.color.warm_grey_four, null))
 
         var messageString: Spannable = SpannableString(message.text)
 
@@ -182,10 +147,14 @@ class MagicIncomingTextMessageViewHolder(incomingView: View) : MessageHolders
             for (key in messageParameters.keys) {
                 val individualHashMap = message.messageParameters[key]
                 if (individualHashMap != null) {
-                    if (individualHashMap["type"] == "user" || individualHashMap["type"] == "guest" || individualHashMap["type"] == "call") {
+                    if (
+                        individualHashMap["type"] == "user" ||
+                        individualHashMap["type"] == "guest" ||
+                        individualHashMap["type"] == "call"
+                    ) {
                         if (individualHashMap["id"] == message.activeUser!!.userId) {
                             messageString = DisplayUtils.searchAndReplaceWithMentionSpan(
-                                messageText!!.context,
+                                binding.messageText.context,
                                 messageString,
                                 individualHashMap["id"]!!,
                                 individualHashMap["name"]!!,
@@ -195,7 +164,7 @@ class MagicIncomingTextMessageViewHolder(incomingView: View) : MessageHolders
                             )
                         } else {
                             messageString = DisplayUtils.searchAndReplaceWithMentionSpan(
-                                messageText!!.context,
+                                binding.messageText.context,
                                 messageString,
                                 individualHashMap["id"]!!,
                                 individualHashMap["name"]!!,
@@ -215,43 +184,45 @@ class MagicIncomingTextMessageViewHolder(incomingView: View) : MessageHolders
         } else if (TextMatchers.isMessageWithSingleEmoticonOnly(message.text)) {
             textSize = (textSize * 2.5).toFloat()
             itemView.isSelected = true
-            messageAuthor!!.visibility = View.GONE
+            binding.messageAuthor.visibility = View.GONE
         }
 
-        messageText!!.setTextSize(TypedValue.COMPLEX_UNIT_PX, textSize)
-        messageText!!.text = messageString
+        binding.messageText.setTextSize(TypedValue.COMPLEX_UNIT_PX, textSize)
+        binding.messageText.text = messageString
 
         // parent message handling
-
         if (!message.isDeleted && message.parentMessage != null) {
-            var parentChatMessage = message.parentMessage
+            val parentChatMessage = message.parentMessage
             parentChatMessage.activeUser = message.activeUser
             parentChatMessage.imageUrl?.let {
-                quotedMessagePreview?.visibility = View.VISIBLE
-                quotedMessagePreview?.load(it) {
+                binding.messageQuote.quotedMessageImage.visibility = View.VISIBLE
+                binding.messageQuote.quotedMessageImage.load(it) {
                     addHeader(
                         "Authorization",
                         ApiUtils.getCredentials(message.activeUser.username, message.activeUser.token)
                     )
                 }
             } ?: run {
-                quotedMessagePreview?.visibility = View.GONE
+                binding.messageQuote.quotedMessageImage.visibility = View.GONE
             }
-            quotedUserName?.text = parentChatMessage.actorDisplayName
+            binding.messageQuote.quotedMessageAuthor.text = parentChatMessage.actorDisplayName
                 ?: context!!.getText(R.string.nc_nick_guest)
-            quotedMessage?.text = parentChatMessage.text
+            binding.messageQuote.quotedMessage.text = parentChatMessage.text
 
-            quotedUserName?.setTextColor(context!!.resources.getColor(R.color.textColorMaxContrast))
+            binding.messageQuote.quotedMessageAuthor
+                .setTextColor(ContextCompat.getColor(context!!, R.color.textColorMaxContrast))
 
             if (parentChatMessage.actorId?.equals(message.activeUser.userId) == true) {
-                quoteColoredView?.setBackgroundResource(R.color.colorPrimary)
+                binding.messageQuote.quoteColoredView.setBackgroundResource(R.color.colorPrimary)
             } else {
-                quoteColoredView?.setBackgroundResource(R.color.textColorMaxContrast)
+                binding.messageQuote.quoteColoredView.setBackgroundResource(R.color.textColorMaxContrast)
             }
 
-            quotedChatMessageView?.visibility = View.VISIBLE
+            binding.messageQuote.quotedChatMessageView.visibility = View.VISIBLE
         } else {
-            quotedChatMessageView?.visibility = View.GONE
+            binding.messageQuote.quotedChatMessageView.visibility = View.GONE
         }
+
+        itemView.setTag(MessageSwipeCallback.REPLYABLE_VIEW_TAG, message.isReplyable)
     }
 }

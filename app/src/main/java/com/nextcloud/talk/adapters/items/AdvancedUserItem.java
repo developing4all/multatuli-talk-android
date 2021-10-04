@@ -22,13 +22,14 @@ package com.nextcloud.talk.adapters.items;
 
 import android.accounts.Account;
 import android.net.Uri;
+import android.text.TextUtils;
 import android.view.View;
-import android.widget.*;
-import androidx.annotation.Nullable;
-import androidx.emoji.widget.EmojiTextView;
+import android.widget.ImageButton;
+import android.widget.ImageView;
+import android.widget.LinearLayout;
+import android.widget.RelativeLayout;
+import android.widget.TextView;
 
-import butterknife.BindView;
-import butterknife.ButterKnife;
 import com.facebook.drawee.backends.pipeline.Fresco;
 import com.facebook.drawee.interfaces.DraweeController;
 import com.facebook.drawee.view.SimpleDraweeView;
@@ -38,14 +39,19 @@ import com.nextcloud.talk.models.database.UserEntity;
 import com.nextcloud.talk.models.json.participants.Participant;
 import com.nextcloud.talk.utils.ApiUtils;
 import com.nextcloud.talk.utils.DisplayUtils;
+
+import java.util.List;
+import java.util.regex.Pattern;
+
+import androidx.annotation.Nullable;
+import androidx.emoji.widget.EmojiTextView;
+import butterknife.BindView;
+import butterknife.ButterKnife;
 import eu.davidea.flexibleadapter.FlexibleAdapter;
 import eu.davidea.flexibleadapter.items.AbstractFlexibleItem;
 import eu.davidea.flexibleadapter.items.IFilterable;
 import eu.davidea.flexibleadapter.utils.FlexibleUtils;
 import eu.davidea.viewholders.FlexibleViewHolder;
-
-import java.util.List;
-import java.util.regex.Pattern;
 
 public class AdvancedUserItem extends AbstractFlexibleItem<AdvancedUserItem.UserItemViewHolder> implements
         IFilterable<String> {
@@ -107,26 +113,36 @@ public class AdvancedUserItem extends AbstractFlexibleItem<AdvancedUserItem.User
         holder.avatarImageView.setController(null);
 
         if (adapter.hasFilter()) {
-            FlexibleUtils.highlightText(holder.contactDisplayName, participant.getDisplayName(),
-                    String.valueOf(adapter.getFilter(String.class)), NextcloudTalkApplication.Companion.getSharedApplication()
-                            .getResources().getColor(R.color.colorPrimary));
+            FlexibleUtils.highlightText(
+                    holder.contactDisplayName,
+                    participant.getDisplayName(),
+                    String.valueOf(adapter.getFilter(String.class)),
+                    NextcloudTalkApplication.Companion.getSharedApplication()
+                            .getResources()
+                            .getColor(R.color.colorPrimary));
         } else {
             holder.contactDisplayName.setText(participant.getDisplayName());
         }
 
-        holder.serverUrl.setText((Uri.parse(userEntity.getBaseUrl()).getHost()));
+        if (userEntity != null && !TextUtils.isEmpty(userEntity.getBaseUrl())) {
+            holder.serverUrl.setText((Uri.parse(userEntity.getBaseUrl()).getHost()));
+        }
 
-        if (userEntity != null && userEntity.getBaseUrl() != null && userEntity.getBaseUrl().startsWith("http://") || userEntity.getBaseUrl().startsWith("https://")) {
+        holder.avatarImageView.getHierarchy().setPlaceholderImage(R.drawable.account_circle_48dp);
+        holder.avatarImageView.getHierarchy().setFailureImage(R.drawable.account_circle_48dp);
+
+        if (userEntity != null && userEntity.getBaseUrl() != null &&
+                userEntity.getBaseUrl().startsWith("http://") ||
+                userEntity.getBaseUrl().startsWith("https://")) {
             holder.avatarImageView.setVisibility(View.VISIBLE);
 
             DraweeController draweeController = Fresco.newDraweeControllerBuilder()
                     .setOldController(holder.avatarImageView.getController())
                     .setAutoPlayAnimations(true)
                     .setImageRequest(DisplayUtils.getImageRequestForUrl(ApiUtils.getUrlForAvatarWithName(userEntity.getBaseUrl(),
-                            participant.getActorId(), R.dimen.avatar_size), null))
+                            participant.getActorId(), R.dimen.small_item_height), null))
                     .build();
             holder.avatarImageView.setController(draweeController);
-
         } else {
             holder.avatarImageView.setVisibility(View.GONE);
             RelativeLayout.LayoutParams layoutParams = (RelativeLayout.LayoutParams) holder.linearLayout.getLayoutParams();

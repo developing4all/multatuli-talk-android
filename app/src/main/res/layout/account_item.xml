@@ -1,5 +1,5 @@
 <?xml version="1.0" encoding="utf-8"?><!--
-  Nextcloud TAlk application
+  Nextcloud Talk application
 
   Copyright (C) 2016 Andy Scherzinger
   Copyright (C) 2016 Nextcloud
@@ -22,6 +22,7 @@
 <com.google.android.material.card.MaterialCardView xmlns:android="http://schemas.android.com/apk/res/android"
     xmlns:app="http://schemas.android.com/apk/res-auto"
     xmlns:tools="http://schemas.android.com/tools"
+    xmlns:fresco="http://schemas.android.com/apk/res-auto"
     android:layout_width="match_parent"
     android:layout_height="72dp"
     android:layout_margin="4dp"
@@ -52,7 +53,9 @@
                 android:layout_marginEnd="1dp"
                 android:layout_marginBottom="1dp"
                 android:contentDescription="@string/avatar"
-                android:src="@drawable/ic_user"
+                android:src="@drawable/account_circle_48dp"
+                fresco:placeholderImage="@drawable/account_circle_48dp"
+                fresco:failureImage="@drawable/account_circle_48dp"
                 app:roundAsCircle="true"/>
 
             <ImageView
@@ -61,6 +64,7 @@
                 android:layout_height="18dp"
                 android:layout_gravity="bottom|end"
                 android:background="@drawable/round_bgnd"
+                android:contentDescription="@string/nc_account_chooser_active_user"
                 android:src="@drawable/ic_check_circle"
                 tools:visibility="gone" />
         </FrameLayout>
@@ -84,8 +88,9 @@
                 android:layout_marginTop="4dp"
                 android:layout_marginEnd="@dimen/standard_double_margin"
                 android:ellipsize="end"
-                android:gravity="bottom"
+                android:gravity="start|bottom"
                 android:maxLines="1"
+                android:textAlignment="viewStart"
                 android:textColor="@color/conversation_item_header"
                 android:textSize="@dimen/two_line_primary_text_size"
                 tools:text="Firstname Lastname" />
@@ -112,8 +117,9 @@
                 android:layout_marginEnd="@dimen/standard_double_margin"
                 android:layout_marginBottom="4dp"
                 android:ellipsize="end"
-                android:gravity="top"
+                android:gravity="start|top"
                 android:maxLines="1"
+                android:textAlignment="viewStart"
                 android:textColor="@color/textColorMaxContrast"
                 android:textSize="14sp"
                 tools:text="https://server.com/nextcloud" />

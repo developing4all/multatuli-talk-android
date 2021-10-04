@@ -2,6 +2,8 @@
  * Nextcloud Talk application
  *
  * @author Mario Danic
+ * @author Andy Scherzinger
+ * Copyright (C) 2021 Andy Scherzinger (infoi@andy-scherzinger.de)
  * Copyright (C) 2017-2018 Mario Danic <mario@lovelyhq.com>
  *
  * This program is free software: you can redistribute it and/or modify
@@ -20,15 +22,14 @@
 
 package com.nextcloud.talk.activities
 
+import android.app.KeyguardManager
 import android.content.res.Configuration
+import android.os.Build
 import android.os.Bundle
 import android.view.View
-import android.view.ViewGroup
 import android.view.Window
 import android.view.WindowManager
 import autodagger.AutoInjector
-import butterknife.BindView
-import butterknife.ButterKnife
 import com.bluelinelabs.conductor.Conductor
 import com.bluelinelabs.conductor.Router
 import com.bluelinelabs.conductor.RouterTransaction
@@ -38,19 +39,15 @@ import com.nextcloud.talk.application.NextcloudTalkApplication
 import com.nextcloud.talk.controllers.CallController
 import com.nextcloud.talk.controllers.CallNotificationController
 import com.nextcloud.talk.controllers.ChatController
+import com.nextcloud.talk.databinding.ActivityMagicCallBinding
 import com.nextcloud.talk.events.ConfigurationChangeEvent
 import com.nextcloud.talk.utils.bundle.BundleKeys
 
 @AutoInjector(NextcloudTalkApplication::class)
 class MagicCallActivity : BaseActivity() {
+    lateinit var binding: ActivityMagicCallBinding
 
     private lateinit var chatController: ChatController
-
-    @BindView(R.id.controller_container)
-    lateinit var container: ViewGroup
-
-    @BindView(R.id.chatControllerView)
-    lateinit var chatContainer: ViewGroup
 
     private var router: Router? = null
     private var chatRouter: Router? = null
@@ -61,18 +58,17 @@ class MagicCallActivity : BaseActivity() {
         setTheme(R.style.CallTheme)
 
         requestWindowFeature(Window.FEATURE_NO_TITLE)
+        dismissKeyguard()
         window.addFlags(
             WindowManager.LayoutParams.FLAG_FULLSCREEN or
-                WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON or
-                WindowManager.LayoutParams.FLAG_DISMISS_KEYGUARD or WindowManager.LayoutParams.FLAG_SHOW_WHEN_LOCKED or
-                WindowManager.LayoutParams.FLAG_TURN_SCREEN_ON
+                WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON
         )
         window.decorView.systemUiVisibility = systemUiVisibility
 
-        setContentView(R.layout.activity_magic_call)
+        binding = ActivityMagicCallBinding.inflate(layoutInflater)
+        setContentView(binding.root)
 
-        ButterKnife.bind(this)
-        router = Conductor.attachRouter(this, container, savedInstanceState)
+        router = Conductor.attachRouter(this, binding.controllerContainer, savedInstanceState)
         router!!.setPopsLastView(false)
 
         if (!router!!.hasRootController()) {
@@ -95,7 +91,7 @@ class MagicCallActivity : BaseActivity() {
         extras.putBoolean("showToggleChat", true)
 
         chatController = ChatController(extras)
-        chatRouter = Conductor.attachRouter(this, chatContainer, savedInstanceState)
+        chatRouter = Conductor.attachRouter(this, binding.chatControllerView, savedInstanceState)
         chatRouter!!.setRoot(
             RouterTransaction.with(chatController)
                 .pushChangeHandler(HorizontalChangeHandler())
@@ -104,21 +100,49 @@ class MagicCallActivity : BaseActivity() {
     }
 
     fun showChat() {
-        chatContainer.visibility = View.VISIBLE
-        container.visibility = View.GONE
+        enableKeyguard()
+        binding.chatControllerView.visibility = View.VISIBLE
+        binding.controllerContainer.visibility = View.GONE
         chatController.wasDetached = false
         chatController.pullChatMessages(1)
     }
 
     fun showCall() {
-        container.visibility = View.VISIBLE
-        chatContainer.visibility = View.GONE
+        binding.controllerContainer.visibility = View.VISIBLE
+        binding.chatControllerView.visibility = View.GONE
         chatController.wasDetached = true
     }
 
     override fun onConfigurationChanged(newConfig: Configuration) {
         super.onConfigurationChanged(newConfig)
         eventBus.post(ConfigurationChangeEvent())
+    }
+
+    private fun dismissKeyguard() {
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O_MR1) {
+            setShowWhenLocked(true)
+            setTurnScreenOn(true)
+            val keyguardManager = getSystemService(KEYGUARD_SERVICE) as KeyguardManager
+            keyguardManager.requestDismissKeyguard(this, null)
+        } else {
+            window.addFlags(
+                WindowManager.LayoutParams.FLAG_DISMISS_KEYGUARD or
+                    WindowManager.LayoutParams.FLAG_SHOW_WHEN_LOCKED or
+                    WindowManager.LayoutParams.FLAG_TURN_SCREEN_ON
+            )
+        }
+    }
+
+    private fun enableKeyguard() {
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O_MR1) {
+            setShowWhenLocked(false)
+        } else {
+            window.clearFlags(
+                WindowManager.LayoutParams.FLAG_DISMISS_KEYGUARD or
+                    WindowManager.LayoutParams.FLAG_SHOW_WHEN_LOCKED or
+                    WindowManager.LayoutParams.FLAG_TURN_SCREEN_ON
+            )
+        }
     }
 
     companion object {

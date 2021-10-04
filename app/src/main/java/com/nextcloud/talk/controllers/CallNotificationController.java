@@ -64,6 +64,7 @@ import com.nextcloud.talk.controllers.base.BaseController;
 import com.nextcloud.talk.events.CallNotificationClick;
 import com.nextcloud.talk.events.ConfigurationChangeEvent;
 import com.nextcloud.talk.models.RingtoneSettings;
+import com.nextcloud.talk.models.database.CapabilitiesUtil;
 import com.nextcloud.talk.models.database.UserEntity;
 import com.nextcloud.talk.models.json.conversations.Conversation;
 import com.nextcloud.talk.models.json.conversations.RoomOverall;
@@ -79,7 +80,6 @@ import com.nextcloud.talk.utils.singletons.AvatarStatusCodeHolder;
 import org.greenrobot.eventbus.EventBus;
 import org.greenrobot.eventbus.Subscribe;
 import org.greenrobot.eventbus.ThreadMode;
-import org.jetbrains.annotations.NotNull;
 import org.michaelevans.colorart.library.ColorArt;
 import org.parceler.Parcels;
 
@@ -269,24 +269,28 @@ public class CallNotificationController extends BaseController {
                 .observeOn(AndroidSchedulers.mainThread())
                 .subscribe(new Observer<RoomOverall>() {
                     @Override
-                    public void onSubscribe(Disposable d) {
+                    public void onSubscribe(@io.reactivex.annotations.NonNull Disposable d) {
                         disposablesList.add(d);
                     }
 
                     @Override
-                    public void onNext(@NotNull RoomOverall roomOverall) {
+                    public void onNext(@io.reactivex.annotations.NonNull RoomOverall roomOverall) {
                         currentConversation = roomOverall.getOcs().data;
                         runAllThings();
 
                         if (apiVersion >= 3) {
-                            boolean hasCallFlags = userBeingCalled.hasSpreedFeatureCapability("conversation-call-flags");
+                            boolean hasCallFlags =
+                                    CapabilitiesUtil.hasSpreedFeatureCapability(userBeingCalled,
+                                                                                "conversation-call-flags");
                             if (hasCallFlags) {
                                 if (isInCallWithVideo(currentConversation.callFlag)) {
-                                    incomingCallVoiceOrVideoTextView.setText(String.format(getResources().getString(R.string.nc_call_video),
-                                                                                           getResources().getString(R.string.nc_app_name)));
+                                    incomingCallVoiceOrVideoTextView.setText(
+                                            String.format(getResources().getString(R.string.nc_call_video),
+                                                          getResources().getString(R.string.nc_app_product_name)));
                                 } else {
-                                    incomingCallVoiceOrVideoTextView.setText(String.format(getResources().getString(R.string.nc_call_voice),
-                                                                                           getResources().getString(R.string.nc_app_name)));
+                                    incomingCallVoiceOrVideoTextView.setText(
+                                            String.format(getResources().getString(R.string.nc_call_voice),
+                                                          getResources().getString(R.string.nc_app_product_name)));
                                 }
                             }
                         }
@@ -294,7 +298,7 @@ public class CallNotificationController extends BaseController {
 
                     @SuppressLint("LongLogTag")
                     @Override
-                    public void onError(Throwable e) {
+                    public void onError(@io.reactivex.annotations.NonNull Throwable e) {
                         Log.e(TAG, e.getMessage(), e);
                     }
 
@@ -326,8 +330,9 @@ public class CallNotificationController extends BaseController {
         super.onViewBound(view);
 
         String callDescriptionWithoutTypeInfo =
-                String.format(getResources().getString(R.string.nc_call_unknown), getResources().getString(R.string.nc_app_name));
-
+                String.format(
+                        getResources().getString(R.string.nc_call_unknown),
+                        getResources().getString(R.string.nc_app_product_name));
 
         incomingCallVoiceOrVideoTextView.setText(callDescriptionWithoutTypeInfo);
 
@@ -386,8 +391,11 @@ public class CallNotificationController extends BaseController {
                 avatarImageView.setVisibility(View.VISIBLE);
 
                 ImageRequest imageRequest =
-                        DisplayUtils.getImageRequestForUrl(ApiUtils.getUrlForAvatarWithName(userBeingCalled.getBaseUrl(),
-                                                                                            currentConversation.getName(), R.dimen.avatar_size_very_big), null);
+                        DisplayUtils.getImageRequestForUrl(
+                                ApiUtils.getUrlForAvatarWithName(userBeingCalled.getBaseUrl(),
+                                                                 currentConversation.getName(),
+                                                                 R.dimen.avatar_size_very_big),
+                                null);
 
                 ImagePipeline imagePipeline = Fresco.getImagePipeline();
                 DataSource<CloseableReference<CloseableImage>> dataSource = imagePipeline.fetchDecodedImage(imageRequest, null);
@@ -400,11 +408,12 @@ public class CallNotificationController extends BaseController {
                                                                     true);
 
                             if (getResources() != null) {
-                                incomingTextRelativeLayout.setBackground(getResources().getDrawable(R.drawable
-                                                                                                            .incoming_gradient));
+                                incomingTextRelativeLayout.setBackground(
+                                        getResources().getDrawable(R.drawable.incoming_gradient));
                             }
 
-                            if (AvatarStatusCodeHolder.getInstance().getStatusCode() == 200 || AvatarStatusCodeHolder.getInstance().getStatusCode() == 0) {
+                            if (AvatarStatusCodeHolder.getInstance().getStatusCode() == 200 ||
+                                    AvatarStatusCodeHolder.getInstance().getStatusCode() == 0) {
                                 if (getActivity() != null) {
                                     Bitmap backgroundBitmap = bitmap.copy(bitmap.getConfig(), true);
                                     new BlurPostProcessor(5, getActivity()).process(backgroundBitmap);
@@ -426,6 +435,7 @@ public class CallNotificationController extends BaseController {
 
                     @Override
                     protected void onFailureImpl(DataSource<CloseableReference<CloseableImage>> dataSource) {
+                        // unused atm
                     }
                 }, UiThreadImmediateExecutorService.getInstance());
 
@@ -468,10 +478,11 @@ public class CallNotificationController extends BaseController {
     }
 
     private void dispose() {
-        Disposable disposable;
-        for (int i = 0; i < disposablesList.size(); i++) {
-            if (!(disposable = disposablesList.get(i)).isDisposed()) {
-                disposable.dispose();
+        if (disposablesList != null) {
+            for (Disposable disposable : disposablesList) {
+                if (!disposable.isDisposed()) {
+                    disposable.dispose();
+                }
             }
         }
     }
@@ -487,7 +498,8 @@ public class CallNotificationController extends BaseController {
                                             "/raw/librem_by_feandesign_call");
         } else {
             try {
-                RingtoneSettings ringtoneSettings = LoganSquare.parse(callRingtonePreferenceString, RingtoneSettings.class);
+                RingtoneSettings ringtoneSettings = LoganSquare.parse(
+                        callRingtonePreferenceString, RingtoneSettings.class);
                 ringtoneUri = ringtoneSettings.getRingtoneUri();
             } catch (IOException e) {
                 Log.e(TAG, "Failed to parse ringtone settings");
@@ -502,8 +514,11 @@ public class CallNotificationController extends BaseController {
                 mediaPlayer.setDataSource(getActivity(), ringtoneUri);
 
                 mediaPlayer.setLooping(true);
-                AudioAttributes audioAttributes = new AudioAttributes.Builder().setContentType(AudioAttributes
-                                                                                                       .CONTENT_TYPE_SONIFICATION).setUsage(AudioAttributes.USAGE_NOTIFICATION_RINGTONE).build();
+                AudioAttributes audioAttributes = new AudioAttributes
+                        .Builder()
+                        .setContentType(AudioAttributes.CONTENT_TYPE_SONIFICATION)
+                        .setUsage(AudioAttributes.USAGE_NOTIFICATION_RINGTONE)
+                        .build();
                 mediaPlayer.setAudioAttributes(audioAttributes);
 
                 mediaPlayer.setOnPreparedListener(mp -> mediaPlayer.start());

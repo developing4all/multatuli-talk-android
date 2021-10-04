@@ -53,6 +53,7 @@ import com.nextcloud.talk.application.NextcloudTalkApplication;
 import com.nextcloud.talk.components.filebrowser.controllers.BrowserController;
 import com.nextcloud.talk.components.filebrowser.controllers.BrowserForAvatarController;
 import com.nextcloud.talk.controllers.base.BaseController;
+import com.nextcloud.talk.models.database.CapabilitiesUtil;
 import com.nextcloud.talk.models.database.UserEntity;
 import com.nextcloud.talk.models.json.generic.GenericOverall;
 import com.nextcloud.talk.models.json.userprofile.Scope;
@@ -65,7 +66,6 @@ import com.nextcloud.talk.utils.DisplayUtils;
 import com.nextcloud.talk.utils.bundle.BundleKeys;
 import com.nextcloud.talk.utils.database.user.UserUtils;
 
-import org.jetbrains.annotations.NotNull;
 import org.parceler.Parcels;
 
 import java.io.File;
@@ -122,8 +122,8 @@ public class ProfileController extends BaseController {
         super();
     }
 
-    @NotNull
-    protected View inflateView(@NotNull LayoutInflater inflater, @NotNull ViewGroup container) {
+    @NonNull
+    protected View inflateView(@NonNull LayoutInflater inflater, @NonNull ViewGroup container) {
         return inflater.inflate(R.layout.controller_profile, container, false);
     }
 
@@ -157,68 +157,67 @@ public class ProfileController extends BaseController {
 
     @Override
     public boolean onOptionsItemSelected(@NonNull MenuItem item) {
-        switch (item.getItemId()) {
-            case R.id.edit:
-                if (edit) {
-                    save();
+        if (item.getItemId() == R.id.edit) {
+            if (edit) {
+                save();
+            }
+
+            edit = !edit;
+
+            if (edit) {
+                item.setTitle(R.string.save);
+
+                getActivity().findViewById(R.id.emptyList).setVisibility(View.GONE);
+                getActivity().findViewById(R.id.userinfo_list).setVisibility(View.VISIBLE);
+
+                if (CapabilitiesUtil.isAvatarEndpointAvailable(currentUser)) {
+                    // TODO later avatar can also be checked via user fields, for now it is in Talk capability
+                    getActivity().findViewById(R.id.avatar_buttons).setVisibility(View.VISIBLE);
                 }
 
-                edit = !edit;
+                ncApi.getEditableUserProfileFields(
+                        ApiUtils.getCredentials(currentUser.getUsername(), currentUser.getToken()),
+                        ApiUtils.getUrlForUserFields(currentUser.getBaseUrl()))
+                        .subscribeOn(Schedulers.io())
+                        .observeOn(AndroidSchedulers.mainThread())
+                        .subscribe(new Observer<UserProfileFieldsOverall>() {
+                            @Override
+                            public void onSubscribe(@io.reactivex.annotations.NonNull Disposable d) {
+                                // unused atm
+                            }
 
-                if (edit) {
-                    item.setTitle(R.string.save);
+                            @Override
+                            public void onNext(@io.reactivex.annotations.NonNull UserProfileFieldsOverall userProfileFieldsOverall) {
+                                editableFields = userProfileFieldsOverall.getOcs().getData();
+                                adapter.notifyDataSetChanged();
+                            }
 
-                    getActivity().findViewById(R.id.emptyList).setVisibility(View.GONE);
-                    getActivity().findViewById(R.id.userinfo_list).setVisibility(View.VISIBLE);
+                            @Override
+                            public void onError(@io.reactivex.annotations.NonNull Throwable e) {
+                                Log.e(TAG, "Error loading editable user profile from server", e);
+                                edit = false;
+                            }
 
-                    if (currentUser.isAvatarEndpointAvailable()) {
-                        // TODO later avatar can also be checked via user fields, for now it is in Talk capability
-                        getActivity().findViewById(R.id.avatar_buttons).setVisibility(View.VISIBLE);
-                    }
+                            @Override
+                            public void onComplete() {
+                                // unused atm
+                            }
+                        });
+            } else {
+                item.setTitle(R.string.edit);
+                getActivity().findViewById(R.id.avatar_buttons).setVisibility(View.INVISIBLE);
 
-                    ncApi.getEditableUserProfileFields(
-                            ApiUtils.getCredentials(currentUser.getUsername(), currentUser.getToken()),
-                            ApiUtils.getUrlForUserFields(currentUser.getBaseUrl()))
-                            .subscribeOn(Schedulers.io())
-                            .observeOn(AndroidSchedulers.mainThread())
-                            .subscribe(new Observer<UserProfileFieldsOverall>() {
-                                @Override
-                                public void onSubscribe(@NotNull Disposable d) {
-                                }
-
-                                @Override
-                                public void onNext(@NotNull UserProfileFieldsOverall userProfileFieldsOverall) {
-                                    editableFields = userProfileFieldsOverall.getOcs().getData();
-                                    adapter.notifyDataSetChanged();
-                                }
-
-                                @Override
-                                public void onError(@NotNull Throwable e) {
-                                    edit = false;
-                                }
-
-                                @Override
-                                public void onComplete() {
-
-                                }
-                            });
-                } else {
-                    item.setTitle(R.string.edit);
-                    getActivity().findViewById(R.id.avatar_buttons).setVisibility(View.INVISIBLE);
-
-                    if (adapter.filteredDisplayList.size() == 0) {
-                        getActivity().findViewById(R.id.emptyList).setVisibility(View.VISIBLE);
-                        getActivity().findViewById(R.id.userinfo_list).setVisibility(View.GONE);
-                    }
+                if (adapter.filteredDisplayList.size() == 0) {
+                    getActivity().findViewById(R.id.emptyList).setVisibility(View.VISIBLE);
+                    getActivity().findViewById(R.id.userinfo_list).setVisibility(View.GONE);
                 }
+            }
 
-                adapter.notifyDataSetChanged();
+            adapter.notifyDataSetChanged();
 
-                return true;
-
-            default:
-                return super.onOptionsItemSelected(item);
+            return true;
         }
+        return super.onOptionsItemSelected(item);
     }
 
     @Override
@@ -243,11 +242,12 @@ public class ProfileController extends BaseController {
                         .observeOn(AndroidSchedulers.mainThread())
                         .subscribe(new Observer<GenericOverall>() {
                             @Override
-                            public void onSubscribe(@NotNull Disposable d) {
+                            public void onSubscribe(@NonNull Disposable d) {
+                                // unused atm
                             }
 
                             @Override
-                            public void onNext(@NotNull GenericOverall genericOverall) {
+                            public void onNext(@NonNull GenericOverall genericOverall) {
                                 DisplayUtils.loadAvatarImage(
                                         currentUser,
                                         getActivity().findViewById(R.id.avatar_image),
@@ -255,13 +255,13 @@ public class ProfileController extends BaseController {
                             }
 
                             @Override
-                            public void onError(@NotNull Throwable e) {
+                            public void onError(@NonNull Throwable e) {
                                 Toast.makeText(getApplicationContext(), "Error", Toast.LENGTH_LONG).show();
                             }
 
                             @Override
                             public void onComplete() {
-
+                                // unused atm
                             }
                         }));
 
@@ -273,17 +273,18 @@ public class ProfileController extends BaseController {
                 .observeOn(AndroidSchedulers.mainThread())
                 .subscribe(new Observer<UserProfileOverall>() {
                     @Override
-                    public void onSubscribe(@NotNull Disposable d) {
+                    public void onSubscribe(@io.reactivex.annotations.NonNull Disposable d) {
+                        // unused atm
                     }
 
                     @Override
-                    public void onNext(@NotNull UserProfileOverall userProfileOverall) {
+                    public void onNext(@io.reactivex.annotations.NonNull UserProfileOverall userProfileOverall) {
                         userInfo = userProfileOverall.getOcs().getData();
                         showUserProfile();
                     }
 
                     @Override
-                    public void onError(@NotNull Throwable e) {
+                    public void onError(@io.reactivex.annotations.NonNull Throwable e) {
                         setErrorMessageForMultiList(
                                 getActivity().getString(R.string.userinfo_no_info_headline),
                                 getActivity().getString(R.string.userinfo_error_text),
@@ -292,7 +293,7 @@ public class ProfileController extends BaseController {
 
                     @Override
                     public void onComplete() {
-
+                        // unused atm
                     }
                 });
     }
@@ -306,9 +307,12 @@ public class ProfileController extends BaseController {
         if (getActivity() == null) {
             return;
         }
-        ((TextView) getActivity()
+
+        if (currentUser.getBaseUrl() != null) {
+            ((TextView) getActivity()
                 .findViewById(R.id.userinfo_baseurl))
                 .setText(Uri.parse(currentUser.getBaseUrl()).getHost());
+        }
 
         DisplayUtils.loadAvatarImage(currentUser, getActivity().findViewById(R.id.avatar_image), false);
 
@@ -342,18 +346,19 @@ public class ProfileController extends BaseController {
         }
 
         // show edit button
-        if (currentUser.canEditScopes()) {
+        if (CapabilitiesUtil.canEditScopes(currentUser)) {
             ncApi.getEditableUserProfileFields(ApiUtils.getCredentials(currentUser.getUsername(), currentUser.getToken()),
                     ApiUtils.getUrlForUserFields(currentUser.getBaseUrl()))
                     .subscribeOn(Schedulers.io())
                     .observeOn(AndroidSchedulers.mainThread())
                     .subscribe(new Observer<UserProfileFieldsOverall>() {
                         @Override
-                        public void onSubscribe(@NotNull Disposable d) {
+                        public void onSubscribe(@io.reactivex.annotations.NonNull Disposable d) {
+                            // unused atm
                         }
 
                         @Override
-                        public void onNext(@NotNull UserProfileFieldsOverall userProfileFieldsOverall) {
+                        public void onNext(@io.reactivex.annotations.NonNull UserProfileFieldsOverall userProfileFieldsOverall) {
                             editableFields = userProfileFieldsOverall.getOcs().getData();
 
                             getActivity().invalidateOptionsMenu();
@@ -361,13 +366,14 @@ public class ProfileController extends BaseController {
                         }
 
                         @Override
-                        public void onError(@NotNull Throwable e) {
+                        public void onError(@io.reactivex.annotations.NonNull Throwable e) {
+                            Log.e(TAG, "Error loading editable user profile from server", e);
                             edit = false;
                         }
 
                         @Override
                         public void onComplete() {
-
+                            // unused atm
                         }
                     });
         }
@@ -452,11 +458,12 @@ public class ProfileController extends BaseController {
                         .observeOn(AndroidSchedulers.mainThread())
                         .subscribe(new Observer<GenericOverall>() {
                             @Override
-                            public void onSubscribe(@NotNull Disposable d) {
+                            public void onSubscribe(@io.reactivex.annotations.NonNull Disposable d) {
+                                // unused atm
                             }
 
                             @Override
-                            public void onNext(@NotNull GenericOverall userProfileOverall) {
+                            public void onNext(@io.reactivex.annotations.NonNull GenericOverall userProfileOverall) {
                                 Log.d(TAG, "Successfully saved: " + item.text + " as " + item.field);
 
                                 if (item.field == Field.DISPLAYNAME) {
@@ -465,7 +472,7 @@ public class ProfileController extends BaseController {
                             }
 
                             @Override
-                            public void onError(@NotNull Throwable e) {
+                            public void onError(@io.reactivex.annotations.NonNull Throwable e) {
                                 item.text = userInfo.getValueByField(item.field);
                                 Toast.makeText(getApplicationContext(),
                                         String.format(getResources().getString(R.string.failed_to_save),
@@ -478,7 +485,7 @@ public class ProfileController extends BaseController {
 
                             @Override
                             public void onComplete() {
-
+                                // unused atm
                             }
                         });
             }
@@ -534,7 +541,7 @@ public class ProfileController extends BaseController {
 
             @Override
             public void onFailure(@NonNull Call<ResponseBody> call, @NonNull Throwable t) {
-
+                // unused atm
             }
         });
     }
@@ -545,7 +552,6 @@ public class ProfileController extends BaseController {
         try {
             file = File.createTempFile("avatar", "png",
                     Environment.getExternalStoragePublicDirectory(Environment.DIRECTORY_DCIM));
-
 
             try (FileOutputStream out = new FileOutputStream(file)) {
                 bitmap.compress(Bitmap.CompressFormat.PNG, 100, out);
@@ -602,22 +608,24 @@ public class ProfileController extends BaseController {
                 .observeOn(AndroidSchedulers.mainThread())
                 .subscribe(new Observer<GenericOverall>() {
                     @Override
-                    public void onSubscribe(@NotNull Disposable d) {
+                    public void onSubscribe(@io.reactivex.annotations.NonNull Disposable d) {
+                        // unused atm
                     }
 
                     @Override
-                    public void onNext(@NotNull GenericOverall genericOverall) {
+                    public void onNext(@io.reactivex.annotations.NonNull GenericOverall genericOverall) {
                         DisplayUtils.loadAvatarImage(currentUser, getActivity().findViewById(R.id.avatar_image), true);
                     }
 
                     @Override
-                    public void onError(@NotNull Throwable e) {
+                    public void onError(@io.reactivex.annotations.NonNull Throwable e) {
                         Toast.makeText(getApplicationContext(), "Error", Toast.LENGTH_LONG).show();
+                        Log.e(TAG, "Error uploading avatar", e);
                     }
 
                     @Override
                     public void onComplete() {
-
+                        // unused atm
                     }
                 });
     }
@@ -634,23 +642,24 @@ public class ProfileController extends BaseController {
                 .observeOn(AndroidSchedulers.mainThread())
                 .subscribe(new Observer<GenericOverall>() {
                     @Override
-                    public void onSubscribe(@NotNull Disposable d) {
+                    public void onSubscribe(@io.reactivex.annotations.NonNull Disposable d) {
+                        // unused atm
                     }
 
                     @Override
-                    public void onNext(@NotNull GenericOverall userProfileOverall) {
+                    public void onNext(@io.reactivex.annotations.NonNull GenericOverall userProfileOverall) {
                         Log.d(TAG, "Successfully saved: " + item.scope + " as " + item.field);
                     }
 
                     @Override
-                    public void onError(@NotNull Throwable e) {
+                    public void onError(@io.reactivex.annotations.NonNull Throwable e) {
                         item.scope = userInfo.getScopeByField(item.field);
                         Log.e(TAG, "Failed to saved: " + item.scope + " as " + item.field, e);
                     }
 
                     @Override
                     public void onComplete() {
-
+                        // unused atm
                     }
                 });
     }
@@ -772,7 +781,7 @@ public class ProfileController extends BaseController {
             holder.text.addTextChangedListener(new TextWatcher() {
                 @Override
                 public void beforeTextChanged(CharSequence s, int start, int count, int after) {
-
+                    // unused atm
                 }
 
                 @Override
@@ -786,7 +795,7 @@ public class ProfileController extends BaseController {
 
                 @Override
                 public void afterTextChanged(Editable s) {
-
+                    // unused atm
                 }
             });
 

@@ -2,6 +2,8 @@
  * Nextcloud Talk application
  *
  * @author Mario Danic
+ * @author Andy Scherzinger
+ * Copyright (C) 2021 Andy Scherzinger <info@andy-scherzinger.de>
  * Copyright (C) 2017-2020 Mario Danic <mario@lovelyhq.com>
  *
  * This program is free software: you can redistribute it and/or modify
@@ -55,19 +57,6 @@ import android.view.Window;
 import android.widget.EditText;
 import android.widget.TextView;
 
-import androidx.annotation.ColorInt;
-import androidx.annotation.ColorRes;
-import androidx.annotation.DrawableRes;
-import androidx.annotation.NonNull;
-import androidx.annotation.Nullable;
-import androidx.annotation.XmlRes;
-import androidx.appcompat.widget.AppCompatDrawableManager;
-import androidx.appcompat.widget.SearchView;
-import androidx.core.content.ContextCompat;
-import androidx.core.graphics.ColorUtils;
-import androidx.core.graphics.drawable.DrawableCompat;
-import androidx.emoji.text.EmojiCompat;
-
 import com.facebook.common.executors.UiThreadImmediateExecutorService;
 import com.facebook.common.references.CloseableReference;
 import com.facebook.datasource.DataSource;
@@ -101,6 +90,27 @@ import java.util.HashMap;
 import java.util.Map;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
+
+import androidx.annotation.ColorInt;
+import androidx.annotation.ColorRes;
+import androidx.annotation.DrawableRes;
+import androidx.annotation.NonNull;
+import androidx.annotation.Nullable;
+import androidx.annotation.StringRes;
+import androidx.annotation.XmlRes;
+import androidx.appcompat.widget.AppCompatDrawableManager;
+import androidx.appcompat.widget.SearchView;
+import androidx.core.content.ContextCompat;
+import androidx.core.graphics.ColorUtils;
+import androidx.core.graphics.drawable.DrawableCompat;
+import androidx.emoji.text.EmojiCompat;
+
+import static com.nextcloud.talk.utils.FileSortOrder.sort_a_to_z_id;
+import static com.nextcloud.talk.utils.FileSortOrder.sort_big_to_small_id;
+import static com.nextcloud.talk.utils.FileSortOrder.sort_new_to_old_id;
+import static com.nextcloud.talk.utils.FileSortOrder.sort_old_to_new_id;
+import static com.nextcloud.talk.utils.FileSortOrder.sort_small_to_big_id;
+import static com.nextcloud.talk.utils.FileSortOrder.sort_z_to_a_id;
 
 public class DisplayUtils {
 
@@ -160,7 +170,7 @@ public class DisplayUtils {
         return new BitmapDrawable(getRoundedBitmapFromVectorDrawableResource(resources, resource));
     }
 
-    private static Bitmap getBitmap(Drawable drawable) {
+    public static Bitmap getBitmap(Drawable drawable) {
         Bitmap bitmap = Bitmap.createBitmap(drawable.getIntrinsicWidth(),
                 drawable.getIntrinsicHeight(), Bitmap.Config.ARGB_8888);
         Canvas canvas = new Canvas(bitmap);
@@ -547,6 +557,24 @@ public class DisplayUtils {
                 .setImageRequest(DisplayUtils.getImageRequestForUrl(avatarString, null))
                 .build();
         avatarImageView.setController(draweeController);
+    }
+
+    public static @StringRes int getSortOrderStringId(FileSortOrder sortOrder) {
+        switch (sortOrder.name) {
+            case sort_z_to_a_id:
+                return R.string.menu_item_sort_by_name_z_a;
+            case sort_new_to_old_id:
+                return R.string.menu_item_sort_by_date_newest_first;
+            case sort_old_to_new_id:
+                return R.string.menu_item_sort_by_date_oldest_first;
+            case sort_big_to_small_id:
+                return R.string.menu_item_sort_by_size_biggest_first;
+            case sort_small_to_big_id:
+                return R.string.menu_item_sort_by_size_smallest_first;
+            case sort_a_to_z_id:
+            default:
+                return R.string.menu_item_sort_by_name_a_z;
+        }
     }
 }
 

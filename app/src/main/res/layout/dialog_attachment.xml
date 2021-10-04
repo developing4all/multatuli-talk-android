@@ -35,8 +35,42 @@
         android:layout_height="wrap_content"
         android:padding="@dimen/standard_padding"
         android:text="@string/nc_add_file"
+        android:textAlignment="viewStart"
         android:textColor="@color/medium_emphasis_text"
         android:textSize="@dimen/bottom_sheet_text_size" />
+
+    <LinearLayout
+        android:id="@+id/menu_share_location"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:background="?android:attr/selectableItemBackground"
+        android:orientation="horizontal"
+        android:paddingLeft="@dimen/standard_padding"
+        android:paddingTop="@dimen/standard_half_padding"
+        android:paddingRight="@dimen/standard_padding"
+        android:paddingBottom="@dimen/standard_half_padding"
+        tools:ignore="UseCompoundDrawables">
+
+        <ImageView
+            android:id="@+id/menu_icon_share_location"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:contentDescription="@null"
+            android:src="@drawable/ic_baseline_location_on_24"
+            app:tint="@color/colorPrimary" />
+
+        <androidx.appcompat.widget.AppCompatTextView
+            android:id="@+id/txt_share_location"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_gravity="start|center_vertical"
+            android:layout_marginStart="@dimen/standard_margin"
+            android:text="@string/nc_share_location"
+            android:textAlignment="viewStart"
+            android:textColor="@color/high_emphasis_text"
+            android:textSize="@dimen/bottom_sheet_text_size" />
+
+    </LinearLayout>
 
     <LinearLayout
         android:id="@+id/menu_attach_file_from_local"
@@ -62,9 +96,10 @@
             android:id="@+id/txt_attach_file_from_local"
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
-            android:layout_gravity="center_vertical"
+            android:layout_gravity="start|center_vertical"
             android:layout_marginStart="@dimen/standard_margin"
             android:text="@string/nc_upload_local_file"
+            android:textAlignment="viewStart"
             android:textColor="@color/high_emphasis_text"
             android:textSize="@dimen/bottom_sheet_text_size" />
 
@@ -94,8 +129,9 @@
             android:id="@+id/txt_attach_file_from_cloud"
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
-            android:layout_gravity="center_vertical"
+            android:layout_gravity="start|center_vertical"
             android:layout_marginStart="@dimen/standard_margin"
+            android:textAlignment="viewStart"
             android:textColor="@color/high_emphasis_text"
             android:textSize="@dimen/bottom_sheet_text_size"
             tools:text="Share from Nextcloud" />

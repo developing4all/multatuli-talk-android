@@ -84,13 +84,11 @@ public abstract class BaseController extends ButterKnifeController {
 
     @Override
     public boolean onOptionsItemSelected(@NonNull MenuItem item) {
-        switch (item.getItemId()) {
-            case android.R.id.home:
-                getRouter().popCurrentController();
-                return true;
-            default:
-                return super.onOptionsItemSelected(item);
+        if (item.getItemId() == android.R.id.home) {
+            getRouter().popCurrentController();
+            return true;
         }
+        return super.onOptionsItemSelected(item);
     }
 
     private void cleanTempCertPreference() {
@@ -117,7 +115,7 @@ public abstract class BaseController extends ButterKnifeController {
 
             if (getActivity() != null && getActivity() instanceof MainActivity) {
                 MainActivity activity = (MainActivity) getActivity();
-                disableKeyboardPersonalisedLearning(activity.appBar);
+                disableKeyboardPersonalisedLearning(activity.binding.appBar);
             }
         }
     }
@@ -152,32 +150,27 @@ public abstract class BaseController extends ButterKnifeController {
             MainActivity activity = (MainActivity) getActivity();
 
             if (getAppBarLayoutType() == AppBarLayoutType.EMPTY) {
-                activity.toolbar.setVisibility(View.GONE);
-                activity.getSearchCardView().setVisibility(View.GONE);
+                activity.binding.toolbar.setVisibility(View.GONE);
+                activity.binding.searchToolbar.setVisibility(View.GONE);
             } else {
-                AppBarLayout.LayoutParams layoutParams = (AppBarLayout.LayoutParams) activity.searchCardView.getLayoutParams();
+                AppBarLayout.LayoutParams layoutParams =
+                        (AppBarLayout.LayoutParams) activity.binding.searchToolbar.getLayoutParams();
 
                 if (showSearchBar) {
-                    activity.getSearchCardView().setVisibility(View.VISIBLE);
-                    activity.getSearchInputText().setHint(getSearchHint());
-                    activity.toolbar.setVisibility(View.GONE);
+                    activity.binding.searchToolbar.setVisibility(View.VISIBLE);
+                    activity.binding.searchText.setHint(getSearchHint());
+                    activity.binding.toolbar.setVisibility(View.GONE);
                     //layoutParams.setScrollFlags(AppBarLayout.LayoutParams.SCROLL_FLAG_SCROLL | AppBarLayout.LayoutParams.SCROLL_FLAG_SNAP | AppBarLayout.LayoutParams.SCROLL_FLAG_ENTER_ALWAYS);
                     layoutParams.setScrollFlags(0);
-                    activity.appBar.setStateListAnimator(AnimatorInflater.loadStateListAnimator(
-                            activity.appBar.getContext(),
+                    activity.binding.appBar.setStateListAnimator(AnimatorInflater.loadStateListAnimator(
+                            activity.binding.appBar.getContext(),
                             R.animator.appbar_elevation_off)
                     );
                 } else {
-                    activity.getSearchCardView().setVisibility(View.GONE);
-                    activity.toolbar.setVisibility(View.VISIBLE);
-                    layoutParams.setScrollFlags(0);
-                    activity.appBar.setStateListAnimator(AnimatorInflater.loadStateListAnimator(
-                            activity.appBar.getContext(),
-                            R.animator.appbar_elevation_on)
-                    );
+                    hideSearchBar();
                 }
 
-                activity.searchCardView.setLayoutParams(layoutParams);
+                activity.binding.searchToolbar.setLayoutParams(layoutParams);
 
                 if ((getResources() != null)) {
                     if (showSearchBar) {
@@ -201,6 +194,20 @@ public abstract class BaseController extends ButterKnifeController {
                 );
             }
         }
+    }
+
+    protected void hideSearchBar() {
+        MainActivity activity = (MainActivity) getActivity();
+        AppBarLayout.LayoutParams layoutParams =
+                (AppBarLayout.LayoutParams) activity.binding.searchToolbar.getLayoutParams();
+
+        activity.binding.searchToolbar.setVisibility(View.GONE);
+        activity.binding.toolbar.setVisibility(View.VISIBLE);
+        layoutParams.setScrollFlags(0);
+        activity.binding.appBar.setStateListAnimator(AnimatorInflater.loadStateListAnimator(
+                activity.binding.appBar.getContext(),
+                R.animator.appbar_elevation_on)
+                                                    );
     }
 
     @Override
@@ -253,6 +260,6 @@ public abstract class BaseController extends ButterKnifeController {
     }
 
     public String getSearchHint() {
-        return context.getString(R.string.appbar_search_in, context.getString(R.string.nc_app_name));
+        return context.getString(R.string.appbar_search_in, context.getString(R.string.nc_app_product_name));
     }
 }

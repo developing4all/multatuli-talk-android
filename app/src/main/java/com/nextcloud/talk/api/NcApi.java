@@ -359,7 +359,8 @@ public interface NcApi {
     Observable<Void> createRemoteShare(@Nullable @Header("Authorization") String authorization, @Url String url,
                                        @Field("path") String remotePath,
                                        @Field("shareWith") String roomToken,
-                                       @Field("shareType") String shareType);
+                                       @Field("shareType") String shareType,
+                                       @Field("talkMetaData") String talkMetaData);
 
     @FormUrlEncoded
     @PUT
@@ -406,4 +407,15 @@ public interface NcApi {
     @GET
     Call<ResponseBody> downloadResizedImage(@Header("Authorization") String authorization,
                                             @Url String url);
+
+    @FormUrlEncoded
+    @POST
+    Observable<GenericOverall> sendLocation(@Header("Authorization") String authorization,
+                                                        @Url String url,
+                                                        @Field("objectType") String objectType,
+                                                        @Field("objectId") String objectId,
+                                                        @Field("metaData") String metaData);
+
+    @DELETE
+    Observable<GenericOverall> clearChatHistory(@Header("Authorization") String authorization, @Url String url);
 }

@@ -3,6 +3,8 @@
  *
  * @author Marcel Hibbe
  * @author Dariusz Olszewski
+ * @author Andy Scherzinger
+ * Copyright (C) 2021 Andy Scherzinger <info@andy-scherzinger.de>
  * Copyright (C) 2021 Marcel Hibbe <dev@mhibbe.de>
  * Copyright (C) 2021 Dariusz Olszewski
  *
@@ -23,28 +25,24 @@
 package com.nextcloud.talk.activities
 
 import android.content.Intent
-import android.net.Uri
 import android.os.Bundle
+import android.util.Log
 import android.view.Menu
 import android.view.MenuItem
 import android.view.View
-import android.widget.FrameLayout
+import android.widget.Toast
 import androidx.appcompat.app.AppCompatActivity
 import androidx.core.content.FileProvider
-import com.github.chrisbanes.photoview.PhotoView
 import com.nextcloud.talk.BuildConfig
 import com.nextcloud.talk.R
+import com.nextcloud.talk.databinding.ActivityFullScreenImageBinding
+import com.nextcloud.talk.utils.BitmapShrinker
 import pl.droidsonroids.gif.GifDrawable
-import pl.droidsonroids.gif.GifImageView
 import java.io.File
 
 class FullScreenImageActivity : AppCompatActivity() {
-
+    lateinit var binding: ActivityFullScreenImageBinding
     private lateinit var path: String
-    private lateinit var imageWrapperView: FrameLayout
-    private lateinit var photoView: PhotoView
-    private lateinit var gifView: GifImageView
-
     private var showFullscreen = false
 
     override fun onCreateOptionsMenu(menu: Menu?): Boolean {
@@ -53,7 +51,10 @@ class FullScreenImageActivity : AppCompatActivity() {
     }
 
     override fun onOptionsItemSelected(item: MenuItem): Boolean {
-        return if (item.itemId == R.id.share) {
+        return if (item.itemId == android.R.id.home) {
+            onBackPressed()
+            true
+        } else if (item.itemId == R.id.share) {
             val shareUri = FileProvider.getUriForFile(
                 this,
                 BuildConfig.APPLICATION_ID,
@@ -77,42 +78,60 @@ class FullScreenImageActivity : AppCompatActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
 
-        setContentView(R.layout.activity_full_screen_image)
-        setSupportActionBar(findViewById(R.id.imageview_toolbar))
-        supportActionBar?.setDisplayShowTitleEnabled(false)
+        binding = ActivityFullScreenImageBinding.inflate(layoutInflater)
+        setContentView(binding.root)
 
-        imageWrapperView = findViewById(R.id.image_wrapper_view)
-        photoView = findViewById(R.id.photo_view)
-        gifView = findViewById(R.id.gif_view)
+        setSupportActionBar(binding.imageviewToolbar)
 
-        photoView.setOnPhotoTapListener { view, x, y ->
+        binding.photoView.setOnPhotoTapListener { view, x, y ->
             toggleFullscreen()
         }
-        photoView.setOnOutsidePhotoTapListener {
+        binding.photoView.setOnOutsidePhotoTapListener {
             toggleFullscreen()
         }
-        gifView.setOnClickListener {
+        binding.gifView.setOnClickListener {
             toggleFullscreen()
         }
 
         // Enable enlarging the image more than default 3x maximumScale.
         // Medium scale adapted to make double-tap behaviour more consistent.
-        photoView.maximumScale = 6.0f
-        photoView.mediumScale = 2.45f
+        binding.photoView.maximumScale = MAX_SCALE
+        binding.photoView.mediumScale = MEDIUM_SCALE
 
         val fileName = intent.getStringExtra("FILE_NAME")
         val isGif = intent.getBooleanExtra("IS_GIF", false)
 
+        supportActionBar?.title = fileName
+        supportActionBar?.setDisplayHomeAsUpEnabled(true)
+
         path = applicationContext.cacheDir.absolutePath + "/" + fileName
         if (isGif) {
-            photoView.visibility = View.INVISIBLE
-            gifView.visibility = View.VISIBLE
+            binding.photoView.visibility = View.INVISIBLE
+            binding.gifView.visibility = View.VISIBLE
             val gifFromUri = GifDrawable(path)
-            gifView.setImageDrawable(gifFromUri)
+            binding.gifView.setImageDrawable(gifFromUri)
         } else {
-            gifView.visibility = View.INVISIBLE
-            photoView.visibility = View.VISIBLE
-            photoView.setImageURI(Uri.parse(path))
+            binding.gifView.visibility = View.INVISIBLE
+            binding.photoView.visibility = View.VISIBLE
+            displayImage(path)
+        }
+    }
+
+    private fun displayImage(path: String) {
+        val displayMetrics = applicationContext.resources.displayMetrics
+        val doubleScreenWidth = displayMetrics.widthPixels * 2
+        val doubleScreenHeight = displayMetrics.heightPixels * 2
+
+        val bitmap = BitmapShrinker.shrinkBitmap(path, doubleScreenWidth, doubleScreenHeight)
+
+        val bitmapSize: Int = bitmap.byteCount
+
+        // info that 100MB is the limit comes from https://stackoverflow.com/a/53334563
+        if (bitmapSize > HUNDRED_MB) {
+            Log.e(TAG, "bitmap will be too large to display. It won't be displayed to avoid RuntimeException")
+            Toast.makeText(this, R.string.nc_common_error_sorry, Toast.LENGTH_LONG).show()
+        } else {
+            binding.photoView.setImageBitmap(bitmap)
         }
     }
 
@@ -144,5 +163,12 @@ class FullScreenImageActivity : AppCompatActivity() {
                 or View.SYSTEM_UI_FLAG_LAYOUT_HIDE_NAVIGATION
                 or View.SYSTEM_UI_FLAG_LAYOUT_FULLSCREEN
             )
+    }
+
+    companion object {
+        private val TAG = "FullScreenImageActivity"
+        private const val HUNDRED_MB = 100 * 1024 * 1024
+        private const val MAX_SCALE = 6.0f
+        private const val MEDIUM_SCALE = 2.45f
     }
 }

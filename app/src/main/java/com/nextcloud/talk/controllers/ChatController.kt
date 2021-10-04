@@ -3,8 +3,12 @@
  *
  * @author Mario Danic
  * @author Marcel Hibbe
- * Copyright (C) 2017-2019 Mario Danic <mario@lovelyhq.com>
+ * @author Andy Scherzinger
+ * @author Tim Krüger
+ * Copyright (C) 2021 Tim Krüger <t@timkrueger.me>
+ * Copyright (C) 2021 Andy Scherzinger <info@andy-scherzinger.de>
  * Copyright (C) 2021 Marcel Hibbe <dev@mhibbe.de>
+ * Copyright (C) 2017-2019 Mario Danic <mario@lovelyhq.com>
  *
  * This program is free software: you can redistribute it and/or modify
  * it under the terms of the GNU General Public License as published by
@@ -22,18 +26,26 @@
 
 package com.nextcloud.talk.controllers
 
+import android.Manifest
+import android.annotation.SuppressLint
 import android.app.Activity.RESULT_OK
 import android.content.ClipData
 import android.content.Context
 import android.content.Intent
+import android.content.pm.PackageManager
 import android.content.res.Resources
 import android.graphics.Bitmap
-import android.graphics.PorterDuff
 import android.graphics.drawable.ColorDrawable
+import android.media.MediaPlayer
+import android.media.MediaRecorder
 import android.net.Uri
+import android.os.Build
+import android.os.Build.VERSION_CODES.O
 import android.os.Bundle
 import android.os.Handler
-import android.os.Parcelable
+import android.os.SystemClock
+import android.os.VibrationEffect
+import android.os.Vibrator
 import android.text.Editable
 import android.text.InputFilter
 import android.text.TextUtils
@@ -41,34 +53,35 @@ import android.text.TextWatcher
 import android.util.Log
 import android.util.TypedValue
 import android.view.Gravity
-import android.view.LayoutInflater
 import android.view.Menu
 import android.view.MenuInflater
 import android.view.MenuItem
+import android.view.MotionEvent
 import android.view.View
-import android.view.ViewGroup
+import android.view.animation.AlphaAnimation
+import android.view.animation.Animation
+import android.view.animation.LinearInterpolator
 import android.widget.AbsListView
 import android.widget.ImageButton
 import android.widget.ImageView
 import android.widget.PopupMenu
-import android.widget.ProgressBar
 import android.widget.RelativeLayout
-import android.widget.Space
-import android.widget.TextView
 import android.widget.Toast
 import androidx.appcompat.view.ContextThemeWrapper
+import androidx.core.content.ContextCompat
+import androidx.core.content.PermissionChecker
 import androidx.core.graphics.drawable.RoundedBitmapDrawableFactory
+import androidx.core.widget.doAfterTextChanged
 import androidx.emoji.text.EmojiCompat
-import androidx.emoji.widget.EmojiEditText
 import androidx.emoji.widget.EmojiTextView
+import androidx.recyclerview.widget.ItemTouchHelper
 import androidx.recyclerview.widget.LinearLayoutManager
 import androidx.recyclerview.widget.RecyclerView
 import androidx.work.Data
 import androidx.work.OneTimeWorkRequest
+import androidx.work.WorkInfo
 import androidx.work.WorkManager
 import autodagger.AutoInjector
-import butterknife.BindView
-import butterknife.OnClick
 import coil.load
 import com.bluelinelabs.conductor.RouterTransaction
 import com.bluelinelabs.conductor.changehandler.HorizontalChangeHandler
@@ -77,27 +90,37 @@ import com.facebook.common.executors.UiThreadImmediateExecutorService
 import com.facebook.common.references.CloseableReference
 import com.facebook.datasource.DataSource
 import com.facebook.drawee.backends.pipeline.Fresco
-import com.facebook.drawee.view.SimpleDraweeView
 import com.facebook.imagepipeline.datasource.BaseBitmapDataSubscriber
 import com.facebook.imagepipeline.image.CloseableImage
 import com.google.android.flexbox.FlexboxLayout
 import com.nextcloud.talk.R
 import com.nextcloud.talk.activities.MagicCallActivity
+import com.nextcloud.talk.activities.MainActivity
+import com.nextcloud.talk.adapters.messages.IncomingLocationMessageViewHolder
+import com.nextcloud.talk.adapters.messages.IncomingPreviewMessageViewHolder
+import com.nextcloud.talk.adapters.messages.IncomingVoiceMessageViewHolder
 import com.nextcloud.talk.adapters.messages.MagicIncomingTextMessageViewHolder
 import com.nextcloud.talk.adapters.messages.MagicOutcomingTextMessageViewHolder
-import com.nextcloud.talk.adapters.messages.MagicPreviewMessageViewHolder
 import com.nextcloud.talk.adapters.messages.MagicSystemMessageViewHolder
 import com.nextcloud.talk.adapters.messages.MagicUnreadNoticeMessageViewHolder
+import com.nextcloud.talk.adapters.messages.OutcomingLocationMessageViewHolder
+import com.nextcloud.talk.adapters.messages.OutcomingPreviewMessageViewHolder
+import com.nextcloud.talk.adapters.messages.OutcomingVoiceMessageViewHolder
 import com.nextcloud.talk.adapters.messages.TalkMessagesListAdapter
+import com.nextcloud.talk.adapters.messages.VoiceMessageInterface
 import com.nextcloud.talk.api.NcApi
 import com.nextcloud.talk.application.NextcloudTalkApplication
 import com.nextcloud.talk.callbacks.MentionAutocompleteCallback
 import com.nextcloud.talk.components.filebrowser.controllers.BrowserController
 import com.nextcloud.talk.components.filebrowser.controllers.BrowserForSharingController
-import com.nextcloud.talk.controllers.base.BaseController
+import com.nextcloud.talk.controllers.base.NewBaseController
+import com.nextcloud.talk.controllers.util.viewBinding
+import com.nextcloud.talk.databinding.ControllerChatBinding
 import com.nextcloud.talk.events.UserMentionClickEvent
 import com.nextcloud.talk.events.WebSocketCommunicationEvent
+import com.nextcloud.talk.jobs.DownloadFileToCacheWorker
 import com.nextcloud.talk.jobs.UploadAndShareFilesWorker
+import com.nextcloud.talk.models.database.CapabilitiesUtil
 import com.nextcloud.talk.models.database.UserEntity
 import com.nextcloud.talk.models.json.chat.ChatMessage
 import com.nextcloud.talk.models.json.chat.ChatOverall
@@ -110,8 +133,11 @@ import com.nextcloud.talk.models.json.generic.GenericOverall
 import com.nextcloud.talk.models.json.mention.Mention
 import com.nextcloud.talk.presenters.MentionAutocompletePresenter
 import com.nextcloud.talk.ui.dialog.AttachmentDialog
+import com.nextcloud.talk.ui.recyclerview.MessageSwipeActions
+import com.nextcloud.talk.ui.recyclerview.MessageSwipeCallback
 import com.nextcloud.talk.utils.ApiUtils
 import com.nextcloud.talk.utils.ConductorRemapping
+import com.nextcloud.talk.utils.ConductorRemapping.remapChatController
 import com.nextcloud.talk.utils.DateUtils
 import com.nextcloud.talk.utils.DisplayUtils
 import com.nextcloud.talk.utils.KeyboardUtils
@@ -119,8 +145,11 @@ import com.nextcloud.talk.utils.MagicCharPolicy
 import com.nextcloud.talk.utils.NotificationUtils
 import com.nextcloud.talk.utils.UriUtils
 import com.nextcloud.talk.utils.bundle.BundleKeys
+import com.nextcloud.talk.utils.bundle.BundleKeys.KEY_ACTIVE_CONVERSATION
+import com.nextcloud.talk.utils.bundle.BundleKeys.KEY_ROOM_ID
+import com.nextcloud.talk.utils.bundle.BundleKeys.KEY_ROOM_TOKEN
+import com.nextcloud.talk.utils.bundle.BundleKeys.KEY_USER_ENTITY
 import com.nextcloud.talk.utils.database.user.UserUtils
-import com.nextcloud.talk.utils.preferences.AppPreferences
 import com.nextcloud.talk.utils.singletons.ApplicationWideCurrentRoomHolder
 import com.nextcloud.talk.utils.text.Spans
 import com.nextcloud.talk.webrtc.MagicWebSocketInstance
@@ -129,37 +158,46 @@ import com.otaliastudios.autocomplete.Autocomplete
 import com.stfalcon.chatkit.commons.ImageLoader
 import com.stfalcon.chatkit.commons.models.IMessage
 import com.stfalcon.chatkit.messages.MessageHolders
-import com.stfalcon.chatkit.messages.MessageInput
-import com.stfalcon.chatkit.messages.MessagesList
+import com.stfalcon.chatkit.messages.MessageHolders.ContentChecker
 import com.stfalcon.chatkit.messages.MessagesListAdapter
 import com.stfalcon.chatkit.utils.DateFormatter
 import com.vanniktech.emoji.EmojiPopup
-import com.webianks.library.PopupBubble
 import com.yarolegovich.lovelydialog.LovelyStandardDialog
 import io.reactivex.Observer
 import io.reactivex.android.schedulers.AndroidSchedulers
 import io.reactivex.disposables.Disposable
 import io.reactivex.schedulers.Schedulers
+import kotlinx.android.synthetic.main.view_message_input.view.*
 import org.greenrobot.eventbus.EventBus
 import org.greenrobot.eventbus.Subscribe
 import org.greenrobot.eventbus.ThreadMode
 import org.parceler.Parcels
 import retrofit2.HttpException
 import retrofit2.Response
+import java.io.File
+import java.io.IOException
 import java.net.HttpURLConnection
+import java.text.SimpleDateFormat
 import java.util.ArrayList
 import java.util.Date
 import java.util.HashMap
 import java.util.Objects
+import java.util.concurrent.ExecutionException
 import javax.inject.Inject
 
 @AutoInjector(NextcloudTalkApplication::class)
 class ChatController(args: Bundle) :
-    BaseController(args),
+    NewBaseController(
+        R.layout.controller_chat,
+        args
+    ),
     MessagesListAdapter.OnLoadMoreListener,
     MessagesListAdapter.Formatter<Date>,
     MessagesListAdapter.OnMessageViewLongClickListener<IMessage>,
-    MessageHolders.ContentChecker<IMessage> {
+    ContentChecker<ChatMessage>,
+    VoiceMessageInterface {
+
+    private val binding: ControllerChatBinding by viewBinding(ControllerChatBinding::bind)
 
     @Inject
     @JvmField
@@ -171,56 +209,10 @@ class ChatController(args: Bundle) :
 
     @Inject
     @JvmField
-    var appPreferences: AppPreferences? = null
-
-    @Inject
-    @JvmField
-    var context: Context? = null
-
-    @Inject
-    @JvmField
     var eventBus: EventBus? = null
 
-    @BindView(R.id.messagesListView)
-    @JvmField
-    var messagesListView: MessagesList? = null
-
-    @BindView(R.id.messageInputView)
-    @JvmField
-    var messageInputView: MessageInput? = null
-
-    @BindView(R.id.messageInput)
-    @JvmField
-    var messageInput: EmojiEditText? = null
-
-    @BindView(R.id.popupBubbleView)
-    @JvmField
-    var popupBubble: PopupBubble? = null
-
-    @BindView(R.id.progressBar)
-    @JvmField
-    var loadingProgressBar: ProgressBar? = null
-
-    @BindView(R.id.smileyButton)
-    @JvmField
-    var smileyButton: ImageButton? = null
-
-    @BindView(R.id.lobby_view)
-    @JvmField
-    var lobbyView: RelativeLayout? = null
-
-    @BindView(R.id.lobby_text_view)
-    @JvmField
-    var conversationLobbyText: TextView? = null
     val disposableList = ArrayList<Disposable>()
 
-    @JvmField
-    @BindView(R.id.quotedChatMessageView)
-    var quotedChatMessageView: RelativeLayout? = null
-
-    @BindView(R.id.callControlToggleChat)
-    @JvmField
-    var toggleChat: SimpleDraweeView? = null
     var roomToken: String? = null
     val conversationUser: UserEntity?
     val roomPassword: String
@@ -240,7 +232,6 @@ class ChatController(args: Bundle) :
     val voiceOnly: Boolean
     var isFirstMessagesProcessing = true
     var isLeavingForConversation: Boolean = false
-    var isLinkPreviewAllowed: Boolean = false
     var wasDetached: Boolean = false
     var emojiPopup: EmojiPopup? = null
 
@@ -258,17 +249,28 @@ class ChatController(args: Bundle) :
     var pastPreconditionFailed = false
     var futurePreconditionFailed = false
 
+    val filesToUpload: MutableList<String> = ArrayList()
+    var sharedText: String
+    var isVoiceRecordingInProgress: Boolean = false
+    var currentVoiceRecordFile: String = ""
+
+    private var recorder: MediaRecorder? = null
+
+    var mediaPlayer: MediaPlayer? = null
+    lateinit var mediaPlayerHandler: Handler
+    var currentlyPlayedVoiceMessage: ChatMessage? = null
+
     init {
         setHasOptionsMenu(true)
         NextcloudTalkApplication.sharedApplication!!.componentApplication.inject(this)
 
-        this.conversationUser = args.getParcelable(BundleKeys.KEY_USER_ENTITY)
-        this.roomId = args.getString(BundleKeys.KEY_ROOM_ID, "")
-        this.roomToken = args.getString(BundleKeys.KEY_ROOM_TOKEN, "")
+        this.conversationUser = args.getParcelable(KEY_USER_ENTITY)
+        this.roomId = args.getString(KEY_ROOM_ID, "")
+        this.roomToken = args.getString(KEY_ROOM_TOKEN, "")
+        this.sharedText = args.getString(BundleKeys.KEY_SHARED_TEXT, "")
 
-        if (args.containsKey(BundleKeys.KEY_ACTIVE_CONVERSATION)) {
-            this.currentConversation =
-                Parcels.unwrap<Conversation>(args.getParcelable<Parcelable>(BundleKeys.KEY_ACTIVE_CONVERSATION))
+        if (args.containsKey(KEY_ACTIVE_CONVERSATION)) {
+            this.currentConversation = Parcels.unwrap<Conversation>(args.getParcelable(KEY_ACTIVE_CONVERSATION))
         }
 
         this.roomPassword = args.getString(BundleKeys.KEY_CONVERSATION_PASSWORD, "")
@@ -276,7 +278,7 @@ class ChatController(args: Bundle) :
         if (conversationUser?.userId == "?") {
             credentials = null
         } else {
-            credentials = ApiUtils.getCredentials(conversationUser!!.username, conversationUser!!.token)
+            credentials = ApiUtils.getCredentials(conversationUser!!.username, conversationUser.token)
         }
 
         if (args.containsKey(BundleKeys.KEY_FROM_NOTIFICATION_START_CALL)) {
@@ -287,7 +289,7 @@ class ChatController(args: Bundle) :
     }
 
     private fun getRoomInfo() {
-        val shouldRepeat = conversationUser?.hasSpreedFeatureCapability("webinary-lobby") ?: false
+        val shouldRepeat = CapabilitiesUtil.hasSpreedFeatureCapability(conversationUser, "webinary-lobby")
         if (shouldRepeat) {
             checkingLobbyStatus = true
         }
@@ -303,17 +305,24 @@ class ChatController(args: Bundle) :
                         disposableList.add(d)
                     }
 
+                    @Suppress("Detekt.TooGenericExceptionCaught")
                     override fun onNext(roomOverall: RoomOverall) {
                         currentConversation = roomOverall.ocs.data
                         loadAvatarForStatusBar()
 
                         setTitle()
-                        setupMentionAutocomplete()
-                        checkReadOnlyState()
-                        checkLobbyState()
+                        try {
+                            setupMentionAutocomplete()
+                            checkReadOnlyState()
+                            checkLobbyState()
 
-                        if (!inConversation) {
-                            joinRoomWithPassword()
+                            if (!inConversation) {
+                                joinRoomWithPassword()
+                            }
+                        } catch (npe: NullPointerException) {
+                            // view binding can be null
+                            // since this is called asynchrously and UI might have been destroyed in the meantime
+                            Log.i(TAG, "UI destroyed - view binding already gone")
                         }
                     }
 
@@ -326,7 +335,7 @@ class ChatController(args: Bundle) :
                                 lobbyTimerHandler = Handler()
                             }
 
-                            lobbyTimerHandler?.postDelayed({ getRoomInfo() }, 5000)
+                            lobbyTimerHandler?.postDelayed({ getRoomInfo() }, LOBBY_TIMER_DELAY)
                         }
                     }
                 })
@@ -365,10 +374,6 @@ class ChatController(args: Bundle) :
                 override fun onComplete() {
                 }
             })
-    }
-
-    override fun inflateView(inflater: LayoutInflater, container: ViewGroup): View {
-        return inflater.inflate(R.layout.controller_chat, container, false)
     }
 
     private fun loadAvatarForStatusBar() {
@@ -417,7 +422,7 @@ class ChatController(args: Bundle) :
         var adapterWasNull = false
 
         if (adapter == null) {
-            loadingProgressBar?.visibility = View.VISIBLE
+            binding.progressBar.visibility = View.VISIBLE
 
             adapterWasNull = true
 
@@ -432,17 +437,20 @@ class ChatController(args: Bundle) :
             )
 
             messageHolders.setIncomingImageConfig(
-                MagicPreviewMessageViewHolder::class.java,
+                IncomingPreviewMessageViewHolder::class.java,
                 R.layout.item_custom_incoming_preview_message
             )
+
             messageHolders.setOutcomingImageConfig(
-                MagicPreviewMessageViewHolder::class.java,
+                OutcomingPreviewMessageViewHolder::class.java,
                 R.layout.item_custom_outcoming_preview_message
             )
 
             messageHolders.registerContentType(
-                CONTENT_TYPE_SYSTEM_MESSAGE, MagicSystemMessageViewHolder::class.java,
-                R.layout.item_system_message, MagicSystemMessageViewHolder::class.java,
+                CONTENT_TYPE_SYSTEM_MESSAGE,
+                MagicSystemMessageViewHolder::class.java,
+                R.layout.item_system_message,
+                MagicSystemMessageViewHolder::class.java,
                 R.layout.item_system_message,
                 this
             )
@@ -453,6 +461,24 @@ class ChatController(args: Bundle) :
                 R.layout.item_date_header,
                 MagicUnreadNoticeMessageViewHolder::class.java,
                 R.layout.item_date_header, this
+            )
+
+            messageHolders.registerContentType(
+                CONTENT_TYPE_LOCATION,
+                IncomingLocationMessageViewHolder::class.java,
+                R.layout.item_custom_incoming_location_message,
+                OutcomingLocationMessageViewHolder::class.java,
+                R.layout.item_custom_outcoming_location_message,
+                this
+            )
+
+            messageHolders.registerContentType(
+                CONTENT_TYPE_VOICE_MESSAGE,
+                IncomingVoiceMessageViewHolder::class.java,
+                R.layout.item_custom_incoming_voice_message,
+                OutcomingVoiceMessageViewHolder::class.java,
+                R.layout.item_custom_outcoming_voice_message,
+                this
             )
 
             var senderId = ""
@@ -475,22 +501,54 @@ class ChatController(args: Bundle) :
                         .setAutoPlayAnimations(true)
                         .build()
                     imageView.controller = draweeController
-                }
+                },
+                this
             )
         } else {
-            messagesListView?.visibility = View.VISIBLE
+            binding.messagesListView.visibility = View.VISIBLE
         }
 
-        messagesListView?.setAdapter(adapter)
+        binding.messagesListView.setAdapter(adapter)
         adapter?.setLoadMoreListener(this)
         adapter?.setDateHeadersFormatter { format(it) }
         adapter?.setOnMessageViewLongClickListener { view, message -> onMessageViewLongClick(view, message) }
 
-        layoutManager = messagesListView?.layoutManager as LinearLayoutManager?
+        adapter?.registerViewClickListener(
+            R.id.playPauseBtn
+        ) { view, message ->
+            val filename = message.getSelectedIndividualHashMap()["name"]
+            val file = File(context!!.cacheDir, filename!!)
+            if (file.exists()) {
+                if (message.isPlayingVoiceMessage) {
+                    pausePlayback(message)
+                } else {
+                    startPlayback(message)
+                }
+            } else {
+                downloadFileToCache(message)
+            }
+        }
 
-        popupBubble?.setRecyclerView(messagesListView)
+        if (context != null) {
+            val messageSwipeController = MessageSwipeCallback(
+                activity!!,
+                object : MessageSwipeActions {
+                    override fun showReplyUI(position: Int) {
+                        val chatMessage = adapter?.items?.get(position)?.item as ChatMessage?
+                        replyToMessage(chatMessage, chatMessage?.jsonMessageId)
+                    }
+                }
+            )
 
-        popupBubble?.setPopupBubbleListener { context ->
+            val itemTouchHelper = ItemTouchHelper(messageSwipeController)
+            itemTouchHelper.attachToRecyclerView(binding.messagesListView)
+        }
+
+        layoutManager = binding.messagesListView.layoutManager as LinearLayoutManager?
+
+        binding.popupBubbleView.setRecyclerView(binding.messagesListView)
+
+        binding.popupBubbleView.setPopupBubbleListener { context ->
             if (newMessagesCount != 0) {
                 val scrollPosition: Int
                 if (newMessagesCount - 1 < 0) {
@@ -498,20 +556,27 @@ class ChatController(args: Bundle) :
                 } else {
                     scrollPosition = newMessagesCount - 1
                 }
-                Handler().postDelayed({ messagesListView?.smoothScrollToPosition(scrollPosition) }, 200)
+                Handler().postDelayed(
+                    {
+                        binding.messagesListView.smoothScrollToPosition(scrollPosition)
+                    },
+                    NEW_MESSAGES_POPUP_BUBBLE_DELAY
+                )
             }
         }
 
+        binding.messageInputView.setPadding(0, 0, 0, 0)
+
         if (args.containsKey("showToggleChat") && args.getBoolean("showToggleChat")) {
-            toggleChat?.visibility = View.VISIBLE
+            binding.callControlToggleChat.visibility = View.VISIBLE
             wasDetached = true
         }
 
-        toggleChat?.setOnClickListener {
+        binding.callControlToggleChat.setOnClickListener {
             (activity as MagicCallActivity).showCall()
         }
 
-        messagesListView?.addOnScrollListener(object : RecyclerView.OnScrollListener() {
+        binding.messagesListView.addOnScrollListener(object : RecyclerView.OnScrollListener() {
             override fun onScrollStateChanged(recyclerView: RecyclerView, newState: Int) {
                 super.onScrollStateChanged(recyclerView, newState)
 
@@ -520,8 +585,8 @@ class ChatController(args: Bundle) :
                         if (layoutManager!!.findFirstCompletelyVisibleItemPosition() < newMessagesCount) {
                             newMessagesCount = 0
 
-                            if (popupBubble != null && popupBubble!!.isShown) {
-                                popupBubble?.hide()
+                            if (binding.popupBubbleView.isShown == true) {
+                                binding.popupBubbleView.hide()
                             }
                         }
                     }
@@ -530,45 +595,53 @@ class ChatController(args: Bundle) :
         })
 
         val filters = arrayOfNulls<InputFilter>(1)
-        val lengthFilter = conversationUser?.messageMaxLength ?: 1000
+        val lengthFilter = CapabilitiesUtil.getMessageMaxLength(conversationUser) ?: MESSAGE_MAX_LENGTH
 
         filters[0] = InputFilter.LengthFilter(lengthFilter)
-        messageInput?.filters = filters
+        binding.messageInputView.inputEditText?.filters = filters
 
-        messageInput?.addTextChangedListener(object : TextWatcher {
+        binding.messageInputView.inputEditText?.addTextChangedListener(object : TextWatcher {
             override fun beforeTextChanged(s: CharSequence, start: Int, count: Int, after: Int) {
             }
 
+            @Suppress("Detekt.TooGenericExceptionCaught")
             override fun onTextChanged(s: CharSequence, start: Int, before: Int, count: Int) {
-                if (s.length >= lengthFilter) {
-                    messageInput?.error = String.format(
-                        Objects.requireNonNull<Resources>
-                        (resources).getString(R.string.nc_limit_hit),
-                        Integer.toString(lengthFilter)
-                    )
-                } else {
-                    messageInput?.error = null
-                }
+                try {
+                    if (s.length >= lengthFilter) {
+                        binding.messageInputView.inputEditText?.error = String.format(
+                            Objects.requireNonNull<Resources>(resources).getString(R.string.nc_limit_hit),
+                            Integer.toString(lengthFilter)
+                        )
+                    } else {
+                        binding.messageInputView.inputEditText?.error = null
+                    }
 
-                val editable = messageInput?.editableText
-                if (editable != null && messageInput != null) {
-                    val mentionSpans = editable.getSpans(
-                        0, messageInput!!.length(),
-                        Spans.MentionChipSpan::class.java
-                    )
-                    var mentionSpan: Spans.MentionChipSpan
-                    for (i in mentionSpans.indices) {
-                        mentionSpan = mentionSpans[i]
-                        if (start >= editable.getSpanStart(mentionSpan) && start < editable.getSpanEnd(mentionSpan)) {
-                            if (editable.subSequence(
-                                    editable.getSpanStart(mentionSpan),
-                                    editable.getSpanEnd(mentionSpan)
-                                ).toString().trim { it <= ' ' } != mentionSpan.label
+                    val editable = binding.messageInputView.inputEditText?.editableText
+                    if (editable != null && binding.messageInputView.inputEditText != null) {
+                        val mentionSpans = editable.getSpans(
+                            0, binding.messageInputView.inputEditText!!.length(),
+                            Spans.MentionChipSpan::class.java
+                        )
+                        var mentionSpan: Spans.MentionChipSpan
+                        for (i in mentionSpans.indices) {
+                            mentionSpan = mentionSpans[i]
+                            if (start >= editable.getSpanStart(mentionSpan) &&
+                                start < editable.getSpanEnd(mentionSpan)
                             ) {
-                                editable.removeSpan(mentionSpan)
+                                if (editable.subSequence(
+                                        editable.getSpanStart(mentionSpan),
+                                        editable.getSpanEnd(mentionSpan)
+                                    ).toString().trim { it <= ' ' } != mentionSpan.label
+                                ) {
+                                    editable.removeSpan(mentionSpan)
+                                }
                             }
                         }
                     }
+                } catch (npe: NullPointerException) {
+                    // view binding can be null
+                    // since this is called asynchrously and UI might have been destroyed in the meantime
+                    Log.i(TAG, "UI destroyed - view binding already gone")
                 }
             }
 
@@ -576,13 +649,127 @@ class ChatController(args: Bundle) :
             }
         })
 
-        messageInputView?.setAttachmentsListener {
+        showMicrophoneButton(true)
+
+        binding.messageInputView.messageInput.doAfterTextChanged {
+            if (binding.messageInputView.messageInput.text.isEmpty()) {
+                showMicrophoneButton(true)
+            } else {
+                showMicrophoneButton(false)
+            }
+        }
+
+        var sliderInitX = 0F
+        var downX = 0f
+        var deltaX = 0f
+
+        var voiceRecordStartTime = 0L
+        var voiceRecordEndTime = 0L
+
+        binding.messageInputView.recordAudioButton.setOnTouchListener(object : View.OnTouchListener {
+            override fun onTouch(v: View?, event: MotionEvent?): Boolean {
+                view.performClick()
+                when (event?.action) {
+                    MotionEvent.ACTION_DOWN -> {
+                        if (!isRecordAudioPermissionGranted()) {
+                            requestRecordAudioPermissions()
+                            return true
+                        }
+                        if (!UploadAndShareFilesWorker.isStoragePermissionGranted(context!!)) {
+                            UploadAndShareFilesWorker.requestStoragePermission(this@ChatController)
+                            return true
+                        }
+
+                        voiceRecordStartTime = System.currentTimeMillis()
+
+                        setVoiceRecordFileName()
+                        startAudioRecording(currentVoiceRecordFile)
+                        downX = event.x
+                        showRecordAudioUi(true)
+                    }
+                    MotionEvent.ACTION_CANCEL -> {
+                        Log.d(TAG, "ACTION_CANCEL. same as for UP")
+                        if (!isVoiceRecordingInProgress || !isRecordAudioPermissionGranted()) {
+                            return true
+                        }
+
+                        stopAndDiscardAudioRecording()
+                        showRecordAudioUi(false)
+                        binding.messageInputView.slideToCancelDescription.x = sliderInitX
+                    }
+                    MotionEvent.ACTION_UP -> {
+                        Log.d(TAG, "ACTION_UP. stop recording??")
+                        if (!isVoiceRecordingInProgress || !isRecordAudioPermissionGranted()) {
+                            return true
+                        }
+                        showRecordAudioUi(false)
+
+                        voiceRecordEndTime = System.currentTimeMillis()
+                        val voiceRecordDuration = voiceRecordEndTime - voiceRecordStartTime
+                        if (voiceRecordDuration < MINIMUM_VOICE_RECORD_DURATION) {
+                            Log.d(TAG, "voiceRecordDuration: " + voiceRecordDuration)
+                            Toast.makeText(
+                                context,
+                                context!!.getString(R.string.nc_voice_message_hold_to_record_info),
+                                Toast.LENGTH_SHORT
+                            ).show()
+                            stopAndDiscardAudioRecording()
+                            return true
+                        } else {
+                            voiceRecordStartTime = 0L
+                            voiceRecordEndTime = 0L
+                            stopAndSendAudioRecording()
+                        }
+
+                        binding.messageInputView.slideToCancelDescription.x = sliderInitX
+                    }
+                    MotionEvent.ACTION_MOVE -> {
+                        Log.d(TAG, "ACTION_MOVE.")
+
+                        if (!isVoiceRecordingInProgress || !isRecordAudioPermissionGranted()) {
+                            return true
+                        }
+
+                        showRecordAudioUi(true)
+
+                        if (sliderInitX == 0.0F) {
+                            sliderInitX = binding.messageInputView.slideToCancelDescription.x
+                        }
+
+                        val movedX: Float = event.x
+                        deltaX = movedX - downX
+
+                        // only allow slide to left
+                        if (binding.messageInputView.slideToCancelDescription.x > sliderInitX) {
+                            binding.messageInputView.slideToCancelDescription.x = sliderInitX
+                        }
+
+                        if (binding.messageInputView.slideToCancelDescription.x < VOICE_RECORD_CANCEL_SLIDER_X) {
+                            Log.d(TAG, "stopping recording because slider was moved to left")
+                            stopAndDiscardAudioRecording()
+                            showRecordAudioUi(false)
+                            binding.messageInputView.slideToCancelDescription.x = sliderInitX
+                            return true
+                        } else {
+                            binding.messageInputView.slideToCancelDescription.x = binding.messageInputView
+                                .slideToCancelDescription.x + deltaX
+                            downX = movedX
+                        }
+                    }
+                }
+
+                return v?.onTouchEvent(event) ?: true
+            }
+        })
+
+        binding.messageInputView.inputEditText?.setText(sharedText)
+        binding.messageInputView.setAttachmentsListener {
             activity?.let { AttachmentDialog(it, this).show() }
         }
 
-        messageInputView?.button?.setOnClickListener { v -> submitMessage() }
+        binding.messageInputView.button.setOnClickListener { v -> submitMessage() }
 
-        messageInputView?.button?.contentDescription = resources?.getString(
+        binding.messageInputView.button.contentDescription = resources?.getString(
             R.string
                 .nc_description_send_message_button
         )
@@ -603,63 +790,359 @@ class ChatController(args: Bundle) :
         super.onViewBound(view)
     }
 
-    private fun checkReadOnlyState() {
-        if (currentConversation != null) {
-            if (currentConversation?.shouldShowLobby(conversationUser) ?: false || currentConversation?.conversationReadOnlyState != null && currentConversation?.conversationReadOnlyState == Conversation.ConversationReadOnlyState.CONVERSATION_READ_ONLY) {
+    private fun startPlayback(message: ChatMessage) {
 
-                conversationVoiceCallMenuItem?.icon?.alpha = 99
-                conversationVideoMenuItem?.icon?.alpha = 99
-                messageInputView?.visibility = View.GONE
+        if (!this.isAttached) {
+            // don't begin to play voice message if screen is not visible anymore.
+            // this situation might happen if file is downloading but user already left the chatview.
+            // If user returns to chatview, the old chatview instance is not attached anymore
+            // and he has to click the play button again (which is considered to be okay)
+            return
+        }
+
+        initMediaPlayer(message)
+
+        if (!mediaPlayer!!.isPlaying) {
+            mediaPlayer!!.start()
+        }
+
+        mediaPlayerHandler = Handler()
+        activity?.runOnUiThread(object : Runnable {
+            override fun run() {
+                if (mediaPlayer != null) {
+                    val currentPosition: Int = mediaPlayer!!.currentPosition / VOICE_MESSAGE_SEEKBAR_BASE
+                    message.voiceMessagePlayedSeconds = currentPosition
+                    adapter?.update(message)
+                }
+                mediaPlayerHandler.postDelayed(this, SECOND)
+            }
+        })
+
+        message.isDownloadingVoiceMessage = false
+        message.isPlayingVoiceMessage = true
+        adapter?.update(message)
+    }
+
+    private fun pausePlayback(message: ChatMessage) {
+        if (mediaPlayer!!.isPlaying) {
+            mediaPlayer!!.pause()
+        }
+
+        message.isPlayingVoiceMessage = false
+        adapter?.update(message)
+    }
+
+    private fun initMediaPlayer(message: ChatMessage) {
+        if (message != currentlyPlayedVoiceMessage) {
+            currentlyPlayedVoiceMessage?.let { stopMediaPlayer(it) }
+        }
+
+        if (mediaPlayer == null) {
+            val fileName = message.getSelectedIndividualHashMap()["name"]
+            val absolutePath = context!!.cacheDir.absolutePath + "/" + fileName
+            mediaPlayer = MediaPlayer().apply {
+                setDataSource(absolutePath)
+                prepare()
+            }
+            currentlyPlayedVoiceMessage = message
+            message.voiceMessageDuration = mediaPlayer!!.duration / VOICE_MESSAGE_SEEKBAR_BASE
+
+            mediaPlayer!!.setOnCompletionListener {
+                stopMediaPlayer(message)
+            }
+        } else {
+            Log.e(TAG, "mediaPlayer was not null. This should not happen!")
+        }
+    }
+
+    private fun stopMediaPlayer(message: ChatMessage) {
+        message.isPlayingVoiceMessage = false
+        message.resetVoiceMessage = true
+        adapter?.update(message)
+
+        currentlyPlayedVoiceMessage = null
+
+        mediaPlayerHandler.removeCallbacksAndMessages(null)
+
+        mediaPlayer?.stop()
+        mediaPlayer?.release()
+        mediaPlayer = null
+    }
+
+    override fun updateMediaPlayerProgressBySlider(messageWithSlidedProgress: ChatMessage, progress: Int) {
+        if (mediaPlayer != null) {
+            if (messageWithSlidedProgress == currentlyPlayedVoiceMessage) {
+                mediaPlayer!!.seekTo(progress * VOICE_MESSAGE_SEEKBAR_BASE)
+            }
+        }
+    }
+
+    @SuppressLint("LongLogTag")
+    private fun downloadFileToCache(message: ChatMessage) {
+        message.isDownloadingVoiceMessage = true
+        adapter?.update(message)
+
+        val baseUrl = message.activeUser.baseUrl
+        val userId = message.activeUser.userId
+        val attachmentFolder = CapabilitiesUtil.getAttachmentFolder(message.activeUser)
+        val fileName = message.getSelectedIndividualHashMap()["name"]
+        var size = message.getSelectedIndividualHashMap()["size"]
+        if (size == null) {
+            size = "-1"
+        }
+        val fileSize = Integer.valueOf(size)
+        val fileId = message.getSelectedIndividualHashMap()["id"]
+        val path = message.getSelectedIndividualHashMap()["path"]
+
+        // check if download worker is already running
+        val workers = WorkManager.getInstance(
+            context!!
+        ).getWorkInfosByTag(fileId!!)
+        try {
+            for (workInfo in workers.get()) {
+                if (workInfo.state == WorkInfo.State.RUNNING || workInfo.state == WorkInfo.State.ENQUEUED) {
+                    Log.d(TAG, "Download worker for " + fileId + " is already running or scheduled")
+                    return
+                }
+            }
+        } catch (e: ExecutionException) {
+            Log.e(TAG, "Error when checking if worker already exists", e)
+        } catch (e: InterruptedException) {
+            Log.e(TAG, "Error when checking if worker already exists", e)
+        }
+
+        val data: Data = Data.Builder()
+            .putString(DownloadFileToCacheWorker.KEY_BASE_URL, baseUrl)
+            .putString(DownloadFileToCacheWorker.KEY_USER_ID, userId)
+            .putString(DownloadFileToCacheWorker.KEY_ATTACHMENT_FOLDER, attachmentFolder)
+            .putString(DownloadFileToCacheWorker.KEY_FILE_NAME, fileName)
+            .putString(DownloadFileToCacheWorker.KEY_FILE_PATH, path)
+            .putInt(DownloadFileToCacheWorker.KEY_FILE_SIZE, fileSize)
+            .build()
+
+        val downloadWorker: OneTimeWorkRequest = OneTimeWorkRequest.Builder(DownloadFileToCacheWorker::class.java)
+            .setInputData(data)
+            .addTag(fileId)
+            .build()
+
+        WorkManager.getInstance().enqueue(downloadWorker)
+
+        WorkManager.getInstance(context!!).getWorkInfoByIdLiveData(downloadWorker.id)
+            .observeForever { workInfo: WorkInfo ->
+                if (workInfo.state == WorkInfo.State.SUCCEEDED) {
+                    startPlayback(message)
+                }
+            }
+    }
+
+    @SuppressLint("SimpleDateFormat")
+    private fun setVoiceRecordFileName() {
+        val pattern = "yyyy-MM-dd HH-mm-ss"
+        val simpleDateFormat = SimpleDateFormat(pattern)
+        val date: String = simpleDateFormat.format(Date())
+
+        val fileNameWithoutSuffix = String.format(
+            context!!.resources.getString(R.string.nc_voice_message_filename),
+            date, currentConversation!!.displayName
+        )
+        val fileName = fileNameWithoutSuffix + VOICE_MESSAGE_FILE_SUFFIX
+
+        currentVoiceRecordFile = "${context!!.cacheDir.absolutePath}/$fileName"
+    }
+
+    private fun showRecordAudioUi(show: Boolean) {
+        if (show) {
+            binding.messageInputView.microphoneEnabledInfo.visibility = View.VISIBLE
+            binding.messageInputView.microphoneEnabledInfoBackground.visibility = View.VISIBLE
+            binding.messageInputView.audioRecordDuration.visibility = View.VISIBLE
+            binding.messageInputView.slideToCancelDescription.visibility = View.VISIBLE
+            binding.messageInputView.attachmentButton.visibility = View.GONE
+            binding.messageInputView.smileyButton.visibility = View.GONE
+            binding.messageInputView.messageInput.visibility = View.GONE
+            binding.messageInputView.messageInput.hint = ""
+        } else {
+            binding.messageInputView.microphoneEnabledInfo.visibility = View.GONE
+            binding.messageInputView.microphoneEnabledInfoBackground.visibility = View.GONE
+            binding.messageInputView.audioRecordDuration.visibility = View.GONE
+            binding.messageInputView.slideToCancelDescription.visibility = View.GONE
+            binding.messageInputView.attachmentButton.visibility = View.VISIBLE
+            binding.messageInputView.smileyButton.visibility = View.VISIBLE
+            binding.messageInputView.messageInput.visibility = View.VISIBLE
+            binding.messageInputView.messageInput.hint =
+                context?.resources?.getString(R.string.nc_hint_enter_a_message)
+        }
+    }
+
+    private fun isRecordAudioPermissionGranted(): Boolean {
+        return if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
+            return PermissionChecker.checkSelfPermission(
+                context!!,
+                Manifest.permission.RECORD_AUDIO
+            ) == PermissionChecker.PERMISSION_GRANTED
+        } else {
+            true
+        }
+    }
+
+    private fun startAudioRecording(file: String) {
+        binding.messageInputView.audioRecordDuration.base = SystemClock.elapsedRealtime()
+        binding.messageInputView.audioRecordDuration.start()
+
+        val animation: Animation = AlphaAnimation(1.0f, 0.0f)
+        animation.duration = 750
+        animation.interpolator = LinearInterpolator()
+        animation.repeatCount = Animation.INFINITE
+        animation.repeatMode = Animation.REVERSE
+        binding.messageInputView.microphoneEnabledInfo.startAnimation(animation)
+
+        recorder = MediaRecorder().apply {
+            setAudioSource(MediaRecorder.AudioSource.MIC)
+            setOutputFile(file)
+            setOutputFormat(MediaRecorder.OutputFormat.MPEG_4)
+            setAudioEncoder(MediaRecorder.AudioEncoder.AAC)
+
+            try {
+                prepare()
+            } catch (e: IOException) {
+                Log.e(TAG, "prepare for audio recording failed")
+            }
+
+            try {
+                start()
+                isVoiceRecordingInProgress = true
+            } catch (e: IllegalStateException) {
+                Log.e(TAG, "start for audio recording failed")
+            }
+
+            vibrate()
+        }
+    }
+
+    private fun stopAndSendAudioRecording() {
+        stopAudioRecording()
+        val uri = Uri.fromFile(File(currentVoiceRecordFile))
+        uploadFiles(mutableListOf(uri.toString()), true)
+    }
+
+    private fun stopAndDiscardAudioRecording() {
+        stopAudioRecording()
+
+        val cachedFile = File(currentVoiceRecordFile)
+        cachedFile.delete()
+    }
+
+    @Suppress("Detekt.TooGenericExceptionCaught")
+    private fun stopAudioRecording() {
+        binding.messageInputView.audioRecordDuration.stop()
+        binding.messageInputView.microphoneEnabledInfo.clearAnimation()
+
+        if (isVoiceRecordingInProgress) {
+            recorder?.apply {
+                try {
+                    stop()
+                    release()
+                    isVoiceRecordingInProgress = false
+                    Log.d(TAG, "stopped recorder. isVoiceRecordingInProgress = false")
+                } catch (e: RuntimeException) {
+                    Log.w(TAG, "error while stopping recorder!")
+                }
+
+                vibrate()
+            }
+            recorder = null
+        } else {
+            Log.e(TAG, "tried to stop audio recorder but it was not recording")
+        }
+    }
+
+    fun vibrate() {
+        val vibrator = context?.getSystemService(Context.VIBRATOR_SERVICE) as Vibrator
+        if (Build.VERSION.SDK_INT >= O) {
+            vibrator.vibrate(VibrationEffect.createOneShot(SHORT_VIBRATE, VibrationEffect.DEFAULT_AMPLITUDE))
+        } else {
+            vibrator.vibrate(SHORT_VIBRATE)
+        }
+    }
+
+    private fun requestRecordAudioPermissions() {
+        requestPermissions(
+            arrayOf(
+                Manifest.permission.RECORD_AUDIO
+            ),
+            REQUEST_RECORD_AUDIO_PERMISSION
+        )
+    }
+
+    private fun checkReadOnlyState() {
+        if (currentConversation != null && isAlive()) {
+            if (currentConversation?.shouldShowLobby(conversationUser) ?: false ||
+                currentConversation?.conversationReadOnlyState != null &&
+                currentConversation?.conversationReadOnlyState ==
+                Conversation.ConversationReadOnlyState.CONVERSATION_READ_ONLY
+            ) {
+
+                conversationVoiceCallMenuItem?.icon?.alpha = SEMI_TRANSPARENT_INT
+                conversationVideoMenuItem?.icon?.alpha = SEMI_TRANSPARENT_INT
+                binding.messageInputView.visibility = View.GONE
             } else {
                 if (conversationVoiceCallMenuItem != null) {
-                    conversationVoiceCallMenuItem?.icon?.alpha = 255
+                    conversationVoiceCallMenuItem?.icon?.alpha = FULLY_OPAQUE_INT
                 }
 
                 if (conversationVideoMenuItem != null) {
-                    conversationVideoMenuItem?.icon?.alpha = 255
+                    conversationVideoMenuItem?.icon?.alpha = FULLY_OPAQUE_INT
                 }
 
-                if (currentConversation != null && currentConversation!!.shouldShowLobby
-                    (conversationUser)
+                if (currentConversation != null && currentConversation!!.shouldShowLobby(conversationUser)
                 ) {
-                    messageInputView?.visibility = View.GONE
+                    binding.messageInputView.visibility = View.GONE
                 } else {
-                    messageInputView?.visibility = View.VISIBLE
+                    binding.messageInputView.visibility = View.VISIBLE
                 }
             }
         }
     }
 
     private fun checkLobbyState() {
-        if (currentConversation != null && currentConversation?.isLobbyViewApplicable(conversationUser) ?: false) {
+        if (currentConversation != null &&
+            currentConversation?.isLobbyViewApplicable(conversationUser) ?: false &&
+            isAlive()
+        ) {
 
             if (!checkingLobbyStatus) {
                 getRoomInfo()
             }
 
             if (currentConversation?.shouldShowLobby(conversationUser) ?: false) {
-                lobbyView?.visibility = View.VISIBLE
-                messagesListView?.visibility = View.GONE
-                messageInputView?.visibility = View.GONE
-                loadingProgressBar?.visibility = View.GONE
+                binding.lobby.lobbyView.visibility = View.VISIBLE
+                binding.messagesListView.visibility = View.GONE
+                binding.messageInputView.visibility = View.GONE
+                binding.progressBar.visibility = View.GONE
+
+                val sb = StringBuilder()
+                sb.append(resources!!.getText(R.string.nc_lobby_waiting))
+                    .append("\n\n")
 
                 if (currentConversation?.lobbyTimer != null && currentConversation?.lobbyTimer !=
                     0L
                 ) {
-                    conversationLobbyText?.text = String.format(
-                        resources!!.getString(R.string.nc_lobby_waiting_with_date),
-                        DateUtils.getLocalDateStringFromTimestampForLobby(
-                            currentConversation?.lobbyTimer
-                                ?: 0
-                        )
+                    val timestamp = currentConversation?.lobbyTimer ?: 0
+                    val stringWithStartDate = String.format(
+                        resources!!.getString(R.string.nc_lobby_start_date),
+                        DateUtils.getLocalDateStringFromTimestampForLobby(timestamp)
                     )
-                } else {
-                    conversationLobbyText?.setText(R.string.nc_lobby_waiting)
+                    val relativeTime = DateUtils.relativeStartTimeForLobby(timestamp, resources!!)
+
+                    sb.append("$stringWithStartDate - $relativeTime")
+                        .append("\n\n")
                 }
+
+                sb.append(currentConversation!!.description)
+                binding.lobby.lobbyTextView.text = sb.toString()
             } else {
-                lobbyView?.visibility = View.GONE
-                messagesListView?.visibility = View.VISIBLE
-                messageInput?.visibility = View.VISIBLE
+                binding.lobby.lobbyView.visibility = View.GONE
+                binding.messagesListView.visibility = View.VISIBLE
+                binding.messageInputView.inputEditText?.visibility = View.VISIBLE
                 if (isFirstMessagesProcessing && pastPreconditionFailed) {
                     pastPreconditionFailed = false
                     pullChatMessages(0)
@@ -669,9 +1152,9 @@ class ChatController(args: Bundle) :
                 }
             }
         } else {
-            lobbyView?.visibility = View.GONE
-            messagesListView?.visibility = View.VISIBLE
-            messageInput?.visibility = View.VISIBLE
+            binding.lobby.lobbyView.visibility = View.GONE
+            binding.messagesListView.visibility = View.VISIBLE
+            binding.messageInputView.inputEditText?.visibility = View.VISIBLE
         }
     }
 
@@ -680,27 +1163,27 @@ class ChatController(args: Bundle) :
             if (resultCode == RESULT_OK) {
                 try {
                     checkNotNull(intent)
-                    val files: MutableList<String> = ArrayList()
+                    filesToUpload.clear()
                     intent.clipData?.let {
                         for (index in 0 until it.itemCount) {
-                            files.add(it.getItemAt(index).uri.toString())
+                            filesToUpload.add(it.getItemAt(index).uri.toString())
                         }
                     } ?: run {
                         checkNotNull(intent.data)
                         intent.data.let {
-                            files.add(intent.data.toString())
+                            filesToUpload.add(intent.data.toString())
                         }
                     }
-                    require(files.isNotEmpty())
+                    require(filesToUpload.isNotEmpty())
 
                     val filenamesWithLinebreaks = StringBuilder("\n")
 
-                    for (file in files) {
+                    for (file in filesToUpload) {
                         val filename = UriUtils.getFileName(Uri.parse(file), context)
                         filenamesWithLinebreaks.append(filename).append("\n")
                     }
 
-                    val confirmationQuestion = when (files.size) {
+                    val confirmationQuestion = when (filesToUpload.size) {
                         1 -> context?.resources?.getString(R.string.nc_upload_confirm_send_single)?.let {
                             String.format(it, title)
                         }
@@ -714,11 +1197,11 @@ class ChatController(args: Bundle) :
                         .setTitle(confirmationQuestion)
                         .setMessage(filenamesWithLinebreaks.toString())
                         .setPositiveButton(R.string.nc_yes) { v ->
-                            uploadFiles(files)
-                            Toast.makeText(
-                                context, context?.resources?.getString(R.string.nc_upload_in_progess),
-                                Toast.LENGTH_LONG
-                            ).show()
+                            if (UploadAndShareFilesWorker.isStoragePermissionGranted(context!!)) {
+                                uploadFiles(filesToUpload, false)
+                            } else {
+                                UploadAndShareFilesWorker.requestStoragePermission(this)
+                            }
                         }
                         .setNegativeButton(R.string.nc_no) {}
                         .show()
@@ -735,18 +1218,59 @@ class ChatController(args: Bundle) :
         }
     }
 
-    private fun uploadFiles(files: MutableList<String>) {
+    override fun onRequestPermissionsResult(requestCode: Int, permissions: Array<out String>, grantResults: IntArray) {
+        if (requestCode == UploadAndShareFilesWorker.REQUEST_PERMISSION) {
+            if (grantResults.isNotEmpty() && grantResults[0] == PackageManager.PERMISSION_GRANTED) {
+                Log.d(ConversationsListController.TAG, "upload starting after permissions were granted")
+                if (filesToUpload.isNotEmpty()) {
+                    uploadFiles(filesToUpload, false)
+                }
+            } else {
+                Toast
+                    .makeText(context, context?.getString(R.string.read_storage_no_permission), Toast.LENGTH_LONG)
+                    .show()
+            }
+        } else if (requestCode == REQUEST_RECORD_AUDIO_PERMISSION) {
+            if (grantResults.isNotEmpty() && grantResults[0] == PackageManager.PERMISSION_GRANTED) {
+                // do nothing. user will tap on the microphone again if he wants to record audio..
+            } else {
+                Toast.makeText(
+                    context,
+                    context!!.getString(R.string.nc_voice_message_missing_audio_permission),
+                    Toast.LENGTH_LONG
+                ).show()
+            }
+        }
+    }
+
+    private fun uploadFiles(files: MutableList<String>, isVoiceMessage: Boolean) {
+        var metaData = ""
+        if (isVoiceMessage) {
+            metaData = VOICE_MESSAGE_META_DATA
+        }
+
         try {
             require(files.isNotEmpty())
             val data: Data = Data.Builder()
                 .putStringArray(UploadAndShareFilesWorker.DEVICE_SOURCEFILES, files.toTypedArray())
-                .putString(UploadAndShareFilesWorker.NC_TARGETPATH, conversationUser?.getAttachmentFolder())
+                .putString(
+                    UploadAndShareFilesWorker.NC_TARGETPATH,
+                    CapabilitiesUtil.getAttachmentFolder(conversationUser)
+                )
                 .putString(UploadAndShareFilesWorker.ROOM_TOKEN, roomToken)
+                .putString(UploadAndShareFilesWorker.META_DATA, metaData)
                 .build()
             val uploadWorker: OneTimeWorkRequest = OneTimeWorkRequest.Builder(UploadAndShareFilesWorker::class.java)
                 .setInputData(data)
                 .build()
             WorkManager.getInstance().enqueue(uploadWorker)
+
+            if (!isVoiceMessage) {
+                Toast.makeText(
+                    context, context?.getString(R.string.nc_upload_in_progess),
+                    Toast.LENGTH_LONG
+                ).show()
+            }
         } catch (e: IllegalArgumentException) {
             Toast.makeText(context, context?.resources?.getString(R.string.nc_upload_failed), Toast.LENGTH_LONG).show()
             Log.e(javaClass.simpleName, "Something went wrong when trying to upload file", e)
@@ -782,6 +1306,18 @@ class ChatController(args: Bundle) :
         )
     }
 
+    fun showShareLocationScreen() {
+        Log.d(TAG, "showShareLocationScreen")
+
+        val bundle = Bundle()
+        bundle.putString(BundleKeys.KEY_ROOM_TOKEN, roomToken)
+        router.pushController(
+            RouterTransaction.with(LocationPickerController(bundle))
+                .pushChangeHandler(HorizontalChangeHandler())
+                .popChangeHandler(HorizontalChangeHandler())
+        )
+    }
+
     private fun showConversationInfoScreen() {
         val bundle = Bundle()
         bundle.putParcelable(BundleKeys.KEY_USER_ENTITY, conversationUser)
@@ -795,23 +1331,26 @@ class ChatController(args: Bundle) :
     }
 
     private fun setupMentionAutocomplete() {
-        val elevation = 6f
-        resources?.let {
-            val backgroundDrawable = ColorDrawable(it.getColor(R.color.bg_default))
-            val presenter = MentionAutocompletePresenter(applicationContext, roomToken)
-            val callback = MentionAutocompleteCallback(
-                activity,
-                conversationUser, messageInput
-            )
+        if (isAlive()) {
+            val elevation = 6f
+            resources?.let {
+                val backgroundDrawable = ColorDrawable(it.getColor(R.color.bg_default))
+                val presenter = MentionAutocompletePresenter(activity, roomToken)
+                val callback = MentionAutocompleteCallback(
+                    activity,
+                    conversationUser,
+                    binding.messageInputView.inputEditText
+                )
 
-            if (mentionAutocomplete == null && messageInput != null) {
-                mentionAutocomplete = Autocomplete.on<Mention>(messageInput)
-                    .with(elevation)
-                    .with(backgroundDrawable)
-                    .with(MagicCharPolicy('@'))
-                    .with(presenter)
-                    .with(callback)
-                    .build()
+                if (mentionAutocomplete == null && binding.messageInputView.inputEditText != null) {
+                    mentionAutocomplete = Autocomplete.on<Mention>(binding.messageInputView.inputEditText)
+                        .with(elevation)
+                        .with(backgroundDrawable)
+                        .with(MagicCharPolicy('@'))
+                        .with(presenter)
+                        .with(callback)
+                        .build()
+                }
             }
         }
     }
@@ -820,10 +1359,11 @@ class ChatController(args: Bundle) :
         super.onAttach(view)
         eventBus?.register(this)
 
-        if (conversationUser?.userId != "?" && conversationUser?.hasSpreedFeatureCapability("mention-flag") ?: false && activity != null) {
-            activity?.findViewById<View>(R.id.toolbar)?.setOnClickListener { v ->
-                showConversationInfoScreen()
-            }
+        if (conversationUser?.userId != "?" &&
+            CapabilitiesUtil.hasSpreedFeatureCapability(conversationUser, "mention-flag") ?: false &&
+            activity != null
+        ) {
+            activity?.findViewById<View>(R.id.toolbar)?.setOnClickListener { v -> showConversationInfoScreen() }
         }
 
         isLeavingForConversation = false
@@ -832,19 +1372,31 @@ class ChatController(args: Bundle) :
         ApplicationWideCurrentRoomHolder.getInstance().isInCall = false
         ApplicationWideCurrentRoomHolder.getInstance().userInRoom = conversationUser
 
-        isLinkPreviewAllowed = appPreferences?.areLinkPreviewsAllowed ?: false
+        val smileyButton = binding.messageInputView.findViewById<ImageButton>(R.id.smileyButton)
 
-        emojiPopup = messageInput?.let {
+        emojiPopup = binding.messageInputView.inputEditText?.let {
             EmojiPopup.Builder.fromRootView(view).setOnEmojiPopupShownListener {
                 if (resources != null) {
-                    smileyButton?.setColorFilter(resources!!.getColor(R.color.colorPrimary), PorterDuff.Mode.SRC_IN)
+                    smileyButton?.setImageDrawable(
+                        ContextCompat.getDrawable(context!!, R.drawable.ic_baseline_keyboard_24)
+                    )
                 }
             }.setOnEmojiPopupDismissListener {
-                smileyButton?.setColorFilter(
-                    resources!!.getColor(R.color.emoji_icons),
-                    PorterDuff.Mode.SRC_IN
+                smileyButton?.setImageDrawable(
+                    ContextCompat.getDrawable(context!!, R.drawable.ic_insert_emoticon_black_24dp)
                 )
-            }.setOnEmojiClickListener { emoji, imageView -> messageInput?.editableText?.append(" ") }.build(it)
+            }.setOnEmojiClickListener { emoji,
+                imageView ->
+                binding.messageInputView.inputEditText?.editableText?.append(" ")
+            }.build(it)
+        }
+
+        smileyButton?.setOnClickListener {
+            emojiPopup?.toggle()
+        }
+
+        binding.messageInputView.findViewById<ImageButton>(R.id.cancelReplyButton)?.setOnClickListener {
+            cancelReply()
         }
 
         if (activity != null) {
@@ -862,12 +1414,18 @@ class ChatController(args: Bundle) :
         }
     }
 
+    private fun cancelReply() {
+        binding.messageInputView.findViewById<RelativeLayout>(R.id.quotedChatMessageView)?.visibility = View.GONE
+        binding.messageInputView.findViewById<ImageButton>(R.id.attachmentButton)?.visibility = View.VISIBLE
+    }
+
     private fun cancelNotificationsForCurrentConversation() {
         if (conversationUser != null) {
             if (!TextUtils.isEmpty(roomToken)) {
                 NotificationUtils.cancelExistingNotificationsForRoom(
                     applicationContext,
-                    conversationUser, roomToken!!
+                    conversationUser,
+                    roomToken!!
                 )
             }
         }
@@ -900,13 +1458,17 @@ class ChatController(args: Bundle) :
         }
     }
 
-    override fun getTitle(): String {
-        currentConversation?.displayName?.let {
-            return " " + EmojiCompat.get().process(it as CharSequence).toString()
-        }
-
-        return ""
-    }
+    override val title: String
+        get() =
+            if (currentConversation?.displayName != null) {
+                try {
+                    " " + EmojiCompat.get().process(currentConversation?.displayName as CharSequence).toString()
+                } catch (e: IllegalStateException) {
+                    " " + currentConversation?.displayName
+                }
+            } else {
+                ""
+            }
 
     public override fun onDestroy() {
         super.onDestroy()
@@ -919,6 +1481,8 @@ class ChatController(args: Bundle) :
             actionBar?.setIcon(null)
         }
 
+        currentlyPlayedVoiceMessage?.let { stopMediaPlayer(it) }
+
         adapter = null
         inConversation = false
     }
@@ -929,11 +1493,6 @@ class ChatController(args: Bundle) :
                 disposable.dispose()
             }
         }
-    }
-
-    @OnClick(R.id.smileyButton)
-    internal fun onSmileyClick() {
-        emojiPopup?.toggle()
     }
 
     private fun joinRoomWithPassword() {
@@ -960,6 +1519,7 @@ class ChatController(args: Bundle) :
                         disposableList.add(d)
                     }
 
+                    @Suppress("Detekt.TooGenericExceptionCaught")
                     override fun onNext(roomOverall: RoomOverall) {
                         inConversation = true
                         currentConversation?.sessionId = roomOverall.ocs.data.sessionId
@@ -968,7 +1528,14 @@ class ChatController(args: Bundle) :
                             currentConversation?.sessionId
 
                         setupWebsocket()
-                        checkLobbyState()
+
+                        try {
+                            checkLobbyState()
+                        } catch (npe: NullPointerException) {
+                            // view binding can be null
+                            // since this is called asynchrously and UI might have been destroyed in the meantime
+                            Log.i(TAG, "UI destroyed - view binding already gone")
+                        }
 
                         if (isFirstMessagesProcessing) {
                             pullChatMessages(0)
@@ -1061,8 +1628,8 @@ class ChatController(args: Bundle) :
     }
 
     private fun submitMessage() {
-        if (messageInput != null) {
-            val editable = messageInput!!.editableText
+        if (binding.messageInputView.inputEditText != null) {
+            val editable = binding.messageInputView.inputEditText!!.editableText
             val mentionSpans = editable.getSpans(
                 0, editable.length,
                 Spans.MentionChipSpan::class.java
@@ -1077,11 +1644,15 @@ class ChatController(args: Bundle) :
                 editable.replace(editable.getSpanStart(mentionSpan), editable.getSpanEnd(mentionSpan), "@$mentionId")
             }
 
-            messageInput?.setText("")
+            binding.messageInputView.inputEditText?.setText("")
             val replyMessageId: Int? = view?.findViewById<RelativeLayout>(R.id.quotedChatMessageView)?.tag as Int?
             sendMessage(
                 editable,
-                if (view?.findViewById<RelativeLayout>(R.id.quotedChatMessageView)?.visibility == View.VISIBLE) replyMessageId else null
+                if (
+                    view
+                        ?.findViewById<RelativeLayout>(R.id.quotedChatMessageView)
+                        ?.visibility == View.VISIBLE
+                ) replyMessageId else null
             )
             cancelReply()
         }
@@ -1103,16 +1674,24 @@ class ChatController(args: Bundle) :
                 ?.observeOn(AndroidSchedulers.mainThread())
                 ?.subscribe(object : Observer<GenericOverall> {
                     override fun onSubscribe(d: Disposable) {
+                        // unused atm
                     }
 
+                    @Suppress("Detekt.TooGenericExceptionCaught")
                     override fun onNext(genericOverall: GenericOverall) {
                         myFirstMessage = message
 
-                        if (popupBubble?.isShown ?: false) {
-                            popupBubble?.hide()
-                        }
+                        try {
+                            if (binding.popupBubbleView.isShown == true) {
+                                binding.popupBubbleView.hide()
+                            }
 
-                        messagesListView?.smoothScrollToPosition(0)
+                            binding.messagesListView.smoothScrollToPosition(0)
+                        } catch (npe: NullPointerException) {
+                            // view binding can be null
+                            // since this is called asynchrously and UI might have been destroyed in the meantime
+                            Log.i(TAG, "UI destroyed - view binding already gone")
+                        }
                     }
 
                     override fun onError(e: Throwable) {
@@ -1121,19 +1700,21 @@ class ChatController(args: Bundle) :
                             if (Integer.toString(code).startsWith("2")) {
                                 myFirstMessage = message
 
-                                if (popupBubble?.isShown ?: false) {
-                                    popupBubble?.hide()
+                                if (binding.popupBubbleView.isShown == true) {
+                                    binding.popupBubbleView.hide()
                                 }
 
-                                messagesListView?.smoothScrollToPosition(0)
+                                binding.messagesListView.smoothScrollToPosition(0)
                             }
                         }
                     }
 
                     override fun onComplete() {
+                        // unused atm
                     }
                 })
         }
+        showMicrophoneButton(true)
     }
 
     private fun setupWebsocket() {
@@ -1214,20 +1795,29 @@ class ChatController(args: Bundle) :
                             disposableList.add(d)
                         }
 
+                        @Suppress("Detekt.TooGenericExceptionCaught")
                         override fun onNext(response: Response<*>) {
-                            if (response.code() == 304) {
-                                pullChatMessages(1, setReadMarker, xChatLastCommonRead)
-                            } else if (response.code() == 412) {
-                                futurePreconditionFailed = true
-                            } else {
-                                processMessages(response, true, finalTimeout)
+                            try {
+                                if (response.code() == 304) {
+                                    pullChatMessages(1, setReadMarker, xChatLastCommonRead)
+                                } else if (response.code() == 412) {
+                                    futurePreconditionFailed = true
+                                } else {
+                                    processMessages(response, true, finalTimeout)
+                                }
+                            } catch (npe: NullPointerException) {
+                                // view binding can be null
+                                // since this is called asynchrously and UI might have been destroyed in the meantime
+                                Log.i(TAG, "UI destroyed - view binding already gone")
                             }
                         }
 
                         override fun onError(e: Throwable) {
+                            Log.e(TAG, "failed to pull chat messages", e)
                         }
 
                         override fun onComplete() {
+                            // unused atm
                         }
                     })
             } else {
@@ -1243,18 +1833,27 @@ class ChatController(args: Bundle) :
                             disposableList.add(d)
                         }
 
+                        @Suppress("Detekt.TooGenericExceptionCaught")
                         override fun onNext(response: Response<*>) {
-                            if (response.code() == 412) {
-                                pastPreconditionFailed = true
-                            } else {
-                                processMessages(response, false, 0)
+                            try {
+                                if (response.code() == 412) {
+                                    pastPreconditionFailed = true
+                                } else {
+                                    processMessages(response, false, 0)
+                                }
+                            } catch (npe: NullPointerException) {
+                                // view binding can be null
+                                // since this is called asynchrously and UI might have been destroyed in the meantime
+                                Log.i(TAG, "UI destroyed - view binding already gone")
                             }
                         }
 
                         override fun onError(e: Throwable) {
+                            // unused atm
                         }
 
                         override fun onComplete() {
+                            // unused atm
                         }
                     })
             }
@@ -1281,18 +1880,25 @@ class ChatController(args: Bundle) :
             }
         }
 
-        if (response.code() == 200) {
+        if (response.code() == HTTP_CODE_OK) {
 
             val chatOverall = response.body() as ChatOverall?
             val chatMessageList = setDeletionFlagsAndRemoveInfomessages(chatOverall?.ocs!!.data)
+
+            if (chatMessageList.isNotEmpty() &&
+                ChatMessage.SystemMessageType.CLEARED_CHAT == chatMessageList[0].systemMessageType
+            ) {
+                adapter?.clear()
+                adapter?.notifyDataSetChanged()
+            }
 
             if (isFirstMessagesProcessing) {
                 cancelNotificationsForCurrentConversation()
 
                 isFirstMessagesProcessing = false
-                loadingProgressBar?.visibility = View.GONE
+                binding.progressBar.visibility = View.GONE
 
-                messagesListView?.visibility = View.VISIBLE
+                binding.messagesListView.visibility = View.VISIBLE
             }
 
             var countGroupedMessages = 0
@@ -1303,10 +1909,8 @@ class ChatController(args: Bundle) :
                         if (TextUtils.isEmpty(chatMessageList[i].systemMessage) &&
                             TextUtils.isEmpty(chatMessageList[i + 1].systemMessage) &&
                             chatMessageList[i + 1].actorId == chatMessageList[i].actorId &&
-                            countGroupedMessages < 4 && DateFormatter.isSameDay(
-                                    chatMessageList[i].createdAt,
-                                    chatMessageList[i + 1].createdAt
-                                )
+                            countGroupedMessages < 4 &&
+                            DateFormatter.isSameDay(chatMessageList[i].createdAt, chatMessageList[i + 1].createdAt)
                         ) {
                             chatMessageList[i].isGrouped = true
                             countGroupedMessages++
@@ -1318,7 +1922,6 @@ class ChatController(args: Bundle) :
                     val chatMessage = chatMessageList[i]
                     chatMessage.isOneToOneConversation =
                         currentConversation?.type == Conversation.ConversationType.ROOM_TYPE_ONE_TO_ONE_CALL
-                    chatMessage.isLinkPreviewAllowed = isLinkPreviewAllowed
                     chatMessage.activeUser = conversationUser
                 }
 
@@ -1347,16 +1950,19 @@ class ChatController(args: Bundle) :
                     chatMessage = chatMessageList[i]
 
                     chatMessage.activeUser = conversationUser
-                    chatMessage.isLinkPreviewAllowed = isLinkPreviewAllowed
 
                     val shouldScroll =
-                        !isThereANewNotice && !shouldAddNewMessagesNotice && layoutManager?.findFirstVisibleItemPosition() == 0 || adapter != null && adapter?.itemCount == 0
+                        !isThereANewNotice &&
+                            !shouldAddNewMessagesNotice &&
+                            layoutManager?.findFirstVisibleItemPosition() == 0 ||
+                            adapter != null &&
+                            adapter?.itemCount == 0
 
-                    if (!shouldAddNewMessagesNotice && !shouldScroll && popupBubble != null) {
-                        if (!popupBubble!!.isShown) {
+                    if (!shouldAddNewMessagesNotice && !shouldScroll) {
+                        if (!binding.popupBubbleView.isShown) {
                             newMessagesCount = 1
-                            popupBubble?.show()
-                        } else if (popupBubble!!.isShown) {
+                            binding.popupBubbleView.show()
+                        } else if (binding.popupBubbleView.isShown == true) {
                             newMessagesCount++
                         }
                     } else {
@@ -1376,10 +1982,10 @@ class ChatController(args: Bundle) :
                     }
                 }
 
-                if (shouldAddNewMessagesNotice && adapter != null && messagesListView != null) {
+                if (shouldAddNewMessagesNotice && adapter != null) {
                     layoutManager?.scrollToPositionWithOffset(
                         adapter!!.getMessagePositionByIdInReverse("-1"),
-                        messagesListView!!.height / 2
+                        binding.messagesListView.height / 2
                     )
                 }
             }
@@ -1408,7 +2014,7 @@ class ChatController(args: Bundle) :
                 cancelNotificationsForCurrentConversation()
 
                 isFirstMessagesProcessing = false
-                loadingProgressBar?.visibility = View.GONE
+                binding.progressBar.visibility = View.GONE
             }
 
             historyRead = true
@@ -1454,7 +2060,7 @@ class ChatController(args: Bundle) :
     override fun onPrepareOptionsMenu(menu: Menu) {
         super.onPrepareOptionsMenu(menu)
         conversationUser?.let {
-            if (it.hasSpreedFeatureCapability("read-only-rooms")) {
+            if (CapabilitiesUtil.hasSpreedFeatureCapability(it, "read-only-rooms")) {
                 checkReadOnlyState()
             }
         }
@@ -1463,18 +2069,18 @@ class ChatController(args: Bundle) :
     override fun onOptionsItemSelected(item: MenuItem): Boolean {
         when (item.itemId) {
             android.R.id.home -> {
-                router.popCurrentController()
+                (activity as MainActivity).resetConversationsList()
                 return true
             }
             R.id.conversation_video_call -> {
-                if (conversationVideoMenuItem?.icon?.alpha == 255) {
+                if (conversationVideoMenuItem?.icon?.alpha == FULLY_OPAQUE_INT) {
                     startACall(false)
                     return true
                 }
                 return false
             }
             R.id.conversation_voice_call -> {
-                if (conversationVoiceCallMenuItem?.icon?.alpha == 255) {
+                if (conversationVoiceCallMenuItem?.icon?.alpha == FULLY_OPAQUE_INT) {
                     startACall(true)
                     return true
                 }
@@ -1523,9 +2129,9 @@ class ChatController(args: Bundle) :
     private fun getIntentForCall(isVoiceOnlyCall: Boolean): Intent? {
         currentConversation?.let {
             val bundle = Bundle()
-            bundle.putString(BundleKeys.KEY_ROOM_TOKEN, roomToken)
-            bundle.putString(BundleKeys.KEY_ROOM_ID, roomId)
-            bundle.putParcelable(BundleKeys.KEY_USER_ENTITY, conversationUser)
+            bundle.putString(KEY_ROOM_TOKEN, roomToken)
+            bundle.putString(KEY_ROOM_ID, roomId)
+            bundle.putParcelable(KEY_USER_ENTITY, conversationUser)
             bundle.putString(BundleKeys.KEY_CONVERSATION_PASSWORD, roomPassword)
             bundle.putString(BundleKeys.KEY_MODIFIED_BASE_URL, conversationUser?.baseUrl)
             bundle.putString(BundleKeys.KEY_CONVERSATION_NAME, it.displayName)
@@ -1546,18 +2152,13 @@ class ChatController(args: Bundle) :
         }
     }
 
-    @OnClick(R.id.cancelReplyButton)
-    fun cancelReply() {
-        quotedChatMessageView?.visibility = View.GONE
-        messageInputView!!.findViewById<ImageButton>(R.id.attachmentButton)?.visibility = View.VISIBLE
-        messageInputView!!.findViewById<Space>(R.id.attachmentButtonSpace)?.visibility = View.VISIBLE
-    }
-
     override fun onMessageViewLongClick(view: View?, message: IMessage?) {
         PopupMenu(
             ContextThemeWrapper(view?.context, R.style.appActionBarPopupMenu),
             view,
-            if (message?.user?.id == conversationUser?.userId) Gravity.END else Gravity.START
+            if (
+                message?.user?.id == currentConversation?.actorType + "/" + currentConversation?.actorId
+            ) Gravity.END else Gravity.START
         ).apply {
             setOnMenuItemClickListener { item ->
                 when (item?.itemId) {
@@ -1565,55 +2166,102 @@ class ChatController(args: Bundle) :
                     R.id.action_copy_message -> {
                         val clipboardManager =
                             activity?.getSystemService(Context.CLIPBOARD_SERVICE) as android.content.ClipboardManager
-                        val clipData = ClipData.newPlainText(resources?.getString(R.string.nc_app_name), message?.text)
+                        val clipData = ClipData.newPlainText(
+                            resources?.getString(R.string.nc_app_product_name),
+                            message?.text
+                        )
                         clipboardManager.setPrimaryClip(clipData)
+                        true
+                    }
+                    R.id.action_forward_message -> {
+                        val bundle = Bundle()
+                        bundle.putBoolean(BundleKeys.KEY_FORWARD_MSG_FLAG, true)
+                        bundle.putString(BundleKeys.KEY_FORWARD_MSG_TEXT, message?.text)
+                        bundle.putString(BundleKeys.KEY_FORWARD_HIDE_SOURCE_ROOM, roomId)
+                        getRouter().pushController(
+                            RouterTransaction.with(ConversationsListController(bundle))
+                                .pushChangeHandler(HorizontalChangeHandler())
+                                .popChangeHandler(HorizontalChangeHandler())
+                        )
                         true
                     }
                     R.id.action_reply_to_message -> {
                         val chatMessage = message as ChatMessage?
-                        chatMessage?.let {
-                            messageInputView?.findViewById<ImageButton>(R.id.attachmentButton)?.visibility = View.GONE
-                            messageInputView?.findViewById<Space>(R.id.attachmentButtonSpace)?.visibility = View.GONE
-                            messageInputView?.findViewById<ImageButton>(R.id.cancelReplyButton)?.visibility =
-                                View.VISIBLE
-                            messageInputView?.findViewById<EmojiTextView>(R.id.quotedMessage)?.maxLines = 2
-                            messageInputView?.findViewById<EmojiTextView>(R.id.quotedMessage)?.ellipsize =
-                                TextUtils.TruncateAt.END
-                            messageInputView?.findViewById<EmojiTextView>(R.id.quotedMessage)?.text = it.text
-                            messageInputView?.findViewById<EmojiTextView>(R.id.quotedMessageAuthor)?.text =
-                                it.actorDisplayName ?: context!!.getText(R.string.nc_nick_guest)
-
-                            conversationUser?.let { currentUser ->
-
-                                chatMessage.imageUrl?.let { previewImageUrl ->
-                                    messageInputView?.findViewById<ImageView>(R.id.quotedMessageImage)?.visibility =
-                                        View.VISIBLE
-
-                                    val px = TypedValue.applyDimension(
-                                        TypedValue.COMPLEX_UNIT_DIP,
-                                        96f,
-                                        resources?.displayMetrics
-                                    )
-                                    messageInputView?.findViewById<ImageView>(R.id.quotedMessageImage)?.maxHeight =
-                                        px.toInt()
-                                    val layoutParams =
-                                        messageInputView?.findViewById<ImageView>(R.id.quotedMessageImage)?.layoutParams as FlexboxLayout.LayoutParams
-                                    layoutParams.flexGrow = 0f
-                                    messageInputView?.findViewById<ImageView>(R.id.quotedMessageImage)?.layoutParams =
-                                        layoutParams
-                                    messageInputView?.findViewById<ImageView>(R.id.quotedMessageImage)
-                                        ?.load(previewImageUrl) {
-                                            addHeader("Authorization", credentials!!)
-                                        }
-                                } ?: run {
-                                    messageInputView?.findViewById<ImageView>(R.id.quotedMessageImage)?.visibility =
-                                        View.GONE
+                        replyToMessage(chatMessage, message?.jsonMessageId)
+                        true
+                    }
+                    R.id.action_reply_privately -> {
+                        val apiVersion =
+                            ApiUtils.getConversationApiVersion(conversationUser, intArrayOf(ApiUtils.APIv4, 1))
+                        val retrofitBucket = ApiUtils.getRetrofitBucketForCreateRoom(
+                            apiVersion,
+                            conversationUser?.baseUrl,
+                            "1",
+                            null,
+                            message?.user?.id?.substring(6),
+                            null
+                        )
+                        ncApi!!.createRoom(
+                            credentials,
+                            retrofitBucket.getUrl(), retrofitBucket.getQueryMap()
+                        )
+                            .subscribeOn(Schedulers.io())
+                            .observeOn(AndroidSchedulers.mainThread())
+                            .subscribe(object : Observer<RoomOverall> {
+                                override fun onSubscribe(d: Disposable) {
+                                    // unused atm
                                 }
-                            }
 
-                            quotedChatMessageView?.tag = message?.jsonMessageId
-                            quotedChatMessageView?.visibility = View.VISIBLE
-                        }
+                                override fun onNext(roomOverall: RoomOverall) {
+                                    val bundle = Bundle()
+                                    bundle.putParcelable(KEY_USER_ENTITY, conversationUser)
+                                    bundle.putString(KEY_ROOM_TOKEN, roomOverall.getOcs().getData().getToken())
+                                    bundle.putString(KEY_ROOM_ID, roomOverall.getOcs().getData().getRoomId())
+
+                                    // FIXME once APIv2+ is used only, the createRoom already returns all the data
+                                    ncApi!!.getRoom(
+                                        credentials,
+                                        ApiUtils.getUrlForRoom(
+                                            apiVersion, conversationUser?.baseUrl,
+                                            roomOverall.getOcs().getData().getToken()
+                                        )
+                                    )
+                                        .subscribeOn(Schedulers.io())
+                                        .observeOn(AndroidSchedulers.mainThread())
+                                        .subscribe(object : Observer<RoomOverall> {
+                                            override fun onSubscribe(d: Disposable) {
+                                                // unused atm
+                                            }
+
+                                            override fun onNext(roomOverall: RoomOverall) {
+                                                bundle.putParcelable(
+                                                    KEY_ACTIVE_CONVERSATION,
+                                                    Parcels.wrap(roomOverall.getOcs().getData())
+                                                )
+                                                remapChatController(
+                                                    router, conversationUser!!.id,
+                                                    roomOverall.getOcs().getData().getToken(), bundle, true
+                                                )
+                                            }
+
+                                            override fun onError(e: Throwable) {
+                                                Log.e(TAG, e.message, e)
+                                            }
+
+                                            override fun onComplete() {
+                                                // unused atm
+                                            }
+                                        })
+                                }
+
+                                override fun onError(e: Throwable) {
+                                    Log.e(TAG, e.message, e)
+                                }
+
+                                override fun onComplete() {
+                                    // unused atm
+                                }
+                            })
                         true
                     }
                     R.id.action_delete_message -> {
@@ -1635,6 +2283,7 @@ class ChatController(args: Bundle) :
                             ?.observeOn(AndroidSchedulers.mainThread())
                             ?.subscribe(object : Observer<ChatOverallSingleMessage> {
                                 override fun onSubscribe(d: Disposable) {
+                                    // unused atm
                                 }
 
                                 override fun onNext(t: ChatOverallSingleMessage) {
@@ -1657,6 +2306,7 @@ class ChatController(args: Bundle) :
                                 }
 
                                 override fun onComplete() {
+                                    // unused atm
                                 }
                             })
                         true
@@ -1667,10 +2317,85 @@ class ChatController(args: Bundle) :
             inflate(R.menu.chat_message_menu)
             menu.findItem(R.id.action_copy_message).isVisible = !(message as ChatMessage).isDeleted
             menu.findItem(R.id.action_reply_to_message).isVisible = (message as ChatMessage).replyable
+            menu.findItem(R.id.action_reply_privately).isVisible = (message as ChatMessage).replyable &&
+                conversationUser?.userId?.isNotEmpty() == true && conversationUser.userId != "?" &&
+                (message as ChatMessage).user.id.startsWith("users/") &&
+                (message as ChatMessage).user.id.substring(6) != currentConversation?.actorId &&
+                currentConversation?.type != Conversation.ConversationType.ROOM_TYPE_ONE_TO_ONE_CALL
             menu.findItem(R.id.action_delete_message).isVisible = isShowMessageDeletionButton(message)
+            menu.findItem(R.id.action_forward_message).isVisible = ChatMessage.MessageType.REGULAR_TEXT_MESSAGE.equals(
+                (message as ChatMessage)
+                    .getMessageType()
+            )
             if (menu.hasVisibleItems()) {
+                if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.Q) {
+                    setForceShowIcon(true)
+                }
                 show()
             }
+        }
+    }
+
+    private fun replyToMessage(chatMessage: ChatMessage?, jsonMessageId: Int?) {
+        chatMessage?.let {
+            binding.messageInputView.findViewById<ImageButton>(R.id.attachmentButton)?.visibility =
+                View.GONE
+            binding.messageInputView.findViewById<ImageButton>(R.id.cancelReplyButton)?.visibility =
+                View.VISIBLE
+
+            val quotedMessage = binding
+                .messageInputView
+                .findViewById<EmojiTextView>(R.id.quotedMessage)
+
+            quotedMessage?.maxLines = 2
+            quotedMessage?.ellipsize = TextUtils.TruncateAt.END
+            quotedMessage?.text = it.text
+            binding.messageInputView.findViewById<EmojiTextView>(R.id.quotedMessageAuthor)?.text =
+                it.actorDisplayName ?: context!!.getText(R.string.nc_nick_guest)
+
+            conversationUser?.let { currentUser ->
+                val quotedMessageImage = binding
+                    .messageInputView
+                    .findViewById<ImageView>(R.id.quotedMessageImage)
+                chatMessage.imageUrl?.let { previewImageUrl ->
+                    quotedMessageImage?.visibility = View.VISIBLE
+
+                    val px = TypedValue.applyDimension(
+                        TypedValue.COMPLEX_UNIT_DIP,
+                        96f,
+                        resources?.displayMetrics
+                    )
+
+                    quotedMessageImage?.maxHeight = px.toInt()
+                    val layoutParams = quotedMessageImage?.layoutParams as FlexboxLayout.LayoutParams
+                    layoutParams.flexGrow = 0f
+                    quotedMessageImage.layoutParams = layoutParams
+                    quotedMessageImage.load(previewImageUrl) {
+                        addHeader("Authorization", credentials!!)
+                    }
+                } ?: run {
+                    binding
+                        .messageInputView
+                        .findViewById<ImageView>(R.id.quotedMessageImage)
+                        ?.visibility = View.GONE
+                }
+            }
+
+            val quotedChatMessageView = binding
+                .messageInputView
+                .findViewById<RelativeLayout>(R.id.quotedChatMessageView)
+            quotedChatMessageView?.tag = jsonMessageId
+            quotedChatMessageView?.visibility = View.VISIBLE
+        }
+    }
+
+    private fun showMicrophoneButton(show: Boolean) {
+        if (show && CapabilitiesUtil.hasSpreedFeatureCapability(conversationUser, "voice-message-sharing")) {
+            binding.messageInputView.messageSendButton.visibility = View.GONE
+            binding.messageInputView.recordAudioButton.visibility = View.VISIBLE
+        } else {
+            binding.messageInputView.messageSendButton.visibility = View.VISIBLE
+            binding.messageInputView.recordAudioButton.visibility = View.GONE
         }
     }
 
@@ -1680,7 +2405,6 @@ class ChatController(args: Bundle) :
 
         messageTemp.isOneToOneConversation =
             currentConversation?.type == Conversation.ConversationType.ROOM_TYPE_ONE_TO_ONE_CALL
-        messageTemp.isLinkPreviewAllowed = isLinkPreviewAllowed
         messageTemp.activeUser = conversationUser
 
         adapter?.update(messageTemp)
@@ -1693,29 +2417,35 @@ class ChatController(args: Bundle) :
 
         if (message.isDeleted) return false
 
-        val sixHoursInMillis = 6 * 3600 * 1000
-        val isOlderThanSixHours = message.createdAt?.before(Date(System.currentTimeMillis() - sixHoursInMillis)) == true
+        if (message.hasFileAttachment()) return false
+
+        if (OBJECT_MESSAGE.equals(message.message)) return false
+
+        val isOlderThanSixHours = message
+            .createdAt
+            ?.before(Date(System.currentTimeMillis() - AGE_THREHOLD_FOR_DELETE_MESSAGE)) == true
         if (isOlderThanSixHours) return false
 
         val isUserAllowedByPrivileges = if (message.actorId == conversationUser.userId) {
             true
         } else {
-            currentConversation!!.isParticipantOwnerOrModerator
+            currentConversation!!.canModerate(conversationUser)
         }
         if (!isUserAllowedByPrivileges) return false
 
-        if (!conversationUser.hasSpreedFeatureCapability("delete-messages")) return false
+        if (!CapabilitiesUtil.hasSpreedFeatureCapability(conversationUser, "delete-messages")) return false
 
         return true
     }
 
-    override fun hasContentFor(message: IMessage, type: Byte): Boolean {
-        when (type) {
-            CONTENT_TYPE_SYSTEM_MESSAGE -> return !TextUtils.isEmpty(message.systemMessage)
-            CONTENT_TYPE_UNREAD_NOTICE_MESSAGE -> return message.id == "-1"
+    override fun hasContentFor(message: ChatMessage, type: Byte): Boolean {
+        return when (type) {
+            CONTENT_TYPE_LOCATION -> message.hasGeoLocation()
+            CONTENT_TYPE_VOICE_MESSAGE -> message.isVoiceMessage()
+            CONTENT_TYPE_SYSTEM_MESSAGE -> !TextUtils.isEmpty(message.systemMessage)
+            CONTENT_TYPE_UNREAD_NOTICE_MESSAGE -> message.id == "-1"
+            else -> false
         }
-
-        return false
     }
 
     @Subscribe(threadMode = ThreadMode.BACKGROUND)
@@ -1724,7 +2454,11 @@ class ChatController(args: Bundle) :
         switch (webSocketCommunicationEvent.getType()) {
             case "refreshChat":
 
-                if (webSocketCommunicationEvent.getHashMap().get(BundleKeys.KEY_INTERNAL_USER_ID).equals(Long.toString(conversationUser.getId()))) {
+                if (
+                webSocketCommunicationEvent
+                .getHashMap().get(BundleKeys.KEY_INTERNAL_USER_ID)
+                .equals(Long.toString(conversationUser.getId()))
+                ) {
                     if (roomToken.equals(webSocketCommunicationEvent.getHashMap().get(BundleKeys.KEY_ROOM_TOKEN))) {
                         pullChatMessages(2);
                     }
@@ -1747,8 +2481,12 @@ class ChatController(args: Bundle) :
             }
 
             val retrofitBucket = ApiUtils.getRetrofitBucketForCreateRoom(
-                apiVersion, conversationUser?.baseUrl, "1",
-                userMentionClickEvent.userId, null
+                apiVersion,
+                conversationUser?.baseUrl,
+                "1",
+                null,
+                userMentionClickEvent.userId,
+                null
             )
 
             ncApi?.createRoom(
@@ -1759,18 +2497,19 @@ class ChatController(args: Bundle) :
                 ?.observeOn(AndroidSchedulers.mainThread())
                 ?.subscribe(object : Observer<RoomOverall> {
                     override fun onSubscribe(d: Disposable) {
+                        // unused atm
                     }
 
                     override fun onNext(roomOverall: RoomOverall) {
                         val conversationIntent = Intent(activity, MagicCallActivity::class.java)
                         val bundle = Bundle()
-                        bundle.putParcelable(BundleKeys.KEY_USER_ENTITY, conversationUser)
-                        bundle.putString(BundleKeys.KEY_ROOM_TOKEN, roomOverall.ocs.data.token)
-                        bundle.putString(BundleKeys.KEY_ROOM_ID, roomOverall.ocs.data.roomId)
+                        bundle.putParcelable(KEY_USER_ENTITY, conversationUser)
+                        bundle.putString(KEY_ROOM_TOKEN, roomOverall.ocs.data.token)
+                        bundle.putString(KEY_ROOM_ID, roomOverall.ocs.data.roomId)
 
                         if (conversationUser != null) {
                             bundle.putParcelable(
-                                BundleKeys.KEY_ACTIVE_CONVERSATION,
+                                KEY_ACTIVE_CONVERSATION,
                                 Parcels.wrap(roomOverall.ocs.data)
                             )
                             conversationIntent.putExtras(bundle)
@@ -1788,23 +2527,45 @@ class ChatController(args: Bundle) :
                                         router.popCurrentController()
                                     }
                                 },
-                                100
+                                POP_CURRENT_CONTROLLER_DELAY
                             )
                         }
                     }
 
                     override fun onError(e: Throwable) {
+                        // unused atm
                     }
 
-                    override fun onComplete() {}
+                    override fun onComplete() {
+                        // unused atm
+                    }
                 })
         }
     }
 
     companion object {
-        private val TAG = "ChatController"
-        private val CONTENT_TYPE_SYSTEM_MESSAGE: Byte = 1
-        private val CONTENT_TYPE_UNREAD_NOTICE_MESSAGE: Byte = 2
-        val REQUEST_CODE_CHOOSE_FILE: Int = 555
+        private const val TAG = "ChatController"
+        private const val CONTENT_TYPE_SYSTEM_MESSAGE: Byte = 1
+        private const val CONTENT_TYPE_UNREAD_NOTICE_MESSAGE: Byte = 2
+        private const val CONTENT_TYPE_LOCATION: Byte = 3
+        private const val CONTENT_TYPE_VOICE_MESSAGE: Byte = 4
+        private const val NEW_MESSAGES_POPUP_BUBBLE_DELAY: Long = 200
+        private const val POP_CURRENT_CONTROLLER_DELAY: Long = 100
+        private const val LOBBY_TIMER_DELAY: Long = 5000
+        private const val HTTP_CODE_OK: Int = 200
+        private const val MESSAGE_MAX_LENGTH: Int = 1000
+        private const val AGE_THREHOLD_FOR_DELETE_MESSAGE: Int = 21600000 // (6 hours in millis = 6 * 3600 * 1000)
+        private const val REQUEST_CODE_CHOOSE_FILE: Int = 555
+        private const val REQUEST_RECORD_AUDIO_PERMISSION = 222
+        private const val OBJECT_MESSAGE: String = "{object}"
+        private const val MINIMUM_VOICE_RECORD_DURATION: Int = 1000
+        private const val VOICE_RECORD_CANCEL_SLIDER_X: Int = -50
+        private const val VOICE_MESSAGE_META_DATA = "{\"messageType\":\"voice-message\"}"
+        private const val VOICE_MESSAGE_FILE_SUFFIX = ".mp3"
+        private const val SHORT_VIBRATE: Long = 20
+        private const val FULLY_OPAQUE_INT: Int = 255
+        private const val SEMI_TRANSPARENT_INT: Int = 99
+        private const val VOICE_MESSAGE_SEEKBAR_BASE: Int = 1000
+        private const val SECOND: Long = 1000
     }
 }

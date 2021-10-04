@@ -3,6 +3,9 @@
  *
  * @author Andy Scherzinger
  * @author Mario Danic
+ * @author Tim Krüger
+ * Copyright (C) 2021 Tim Krüger <t@timkrueger.me>
+ * Copyright (C) 2021 Andy Scherzinger <info@andy-scherzinger.de>
  * Copyright (C) 2017 Mario Danic (mario@lovelyhq.com)
  *
  * This program is free software: you can redistribute it and/or modify
@@ -68,6 +71,7 @@ import com.nextcloud.talk.controllers.base.BaseController;
 import com.nextcloud.talk.jobs.AccountRemovalWorker;
 import com.nextcloud.talk.jobs.ContactAddressBookWorker;
 import com.nextcloud.talk.models.RingtoneSettings;
+import com.nextcloud.talk.models.database.CapabilitiesUtil;
 import com.nextcloud.talk.models.database.UserEntity;
 import com.nextcloud.talk.models.json.generic.GenericOverall;
 import com.nextcloud.talk.models.json.userprofile.UserProfileOverall;
@@ -172,8 +176,6 @@ public class SettingsController extends BaseController {
     MaterialSwitchPreference incognitoKeyboardSwitchPreference;
     @BindView(R.id.settings_screen_security)
     MaterialSwitchPreference screenSecuritySwitchPreference;
-    @BindView(R.id.settings_link_previews)
-    MaterialSwitchPreference linkPreviewsSwitchPreference;
     @BindView(R.id.settings_screen_lock)
     MaterialSwitchPreference screenLockSwitchPreference;
     @BindView(R.id.settings_screen_lock_timeout)
@@ -275,7 +277,7 @@ public class SettingsController extends BaseController {
         } else {
             screenLockSwitchPreference.setSummary(String.format(Locale.getDefault(),
                     getResources().getString(R.string.nc_settings_screen_lock_desc),
-                    getResources().getString(R.string.nc_app_name)));
+                    getResources().getString(R.string.nc_app_product_name)));
         }
 
 
@@ -317,7 +319,7 @@ public class SettingsController extends BaseController {
                     .popChangeHandler(new HorizontalChangeHandler()));
         });
 
-        if (userUtils.getCurrentUser().isPhoneBookIntegrationAvailable()) {
+        if (CapabilitiesUtil.isPhoneBookIntegrationAvailable(userUtils.getCurrentUser())) {
             phoneBookIntegrationPreference.setVisibility(View.VISIBLE);
         } else {
             phoneBookIntegrationPreference.setVisibility(View.GONE);
@@ -456,13 +458,12 @@ public class SettingsController extends BaseController {
             ((Checkable) incognitoKeyboardSwitchPreference.findViewById(R.id.mp_checkable)).setChecked(appPreferences.getIsKeyboardIncognito());
         }
 
-        if (userUtils.getCurrentUser().isReadStatusAvailable()) {
-            ((Checkable) readPrivacyPreference.findViewById(R.id.mp_checkable)).setChecked(!currentUser.isReadStatusPrivate());
+        if (CapabilitiesUtil.isReadStatusAvailable(userUtils.getCurrentUser())) {
+            ((Checkable) readPrivacyPreference.findViewById(R.id.mp_checkable)).setChecked(!CapabilitiesUtil.isReadStatusPrivate(currentUser));
         } else {
             readPrivacyPreference.setVisibility(View.GONE);
         }
 
-        ((Checkable) linkPreviewsSwitchPreference.findViewById(R.id.mp_checkable)).setChecked(appPreferences.getAreLinkPreviewsAllowed());
         ((Checkable) phoneBookIntegrationPreference.findViewById(R.id.mp_checkable)).setChecked(appPreferences.isPhoneBookIntegrationEnabled());
 
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
@@ -537,12 +538,12 @@ public class SettingsController extends BaseController {
 
             baseUrlTextView.setText(Uri.parse(currentUser.getBaseUrl()).getHost());
 
-            if (currentUser.isServerEOL()) {
+            if (CapabilitiesUtil.isServerEOL(currentUser)) {
                 serverAgeTextView.setTextColor(ContextCompat.getColor(context, R.color.nc_darkRed));
                 serverAgeTextView.setText(R.string.nc_settings_server_eol);
                 serverAgeIcon.setColorFilter(ContextCompat.getColor(context, R.color.nc_darkRed),
                                              PorterDuff.Mode.SRC_IN);
-            } else if (currentUser.isServerAlmostEOL()) {
+            } else if (CapabilitiesUtil.isServerAlmostEOL(currentUser)) {
                 serverAgeTextView.setTextColor(ContextCompat.getColor(context, R.color.nc_darkYellow));
                 serverAgeTextView.setText(R.string.nc_settings_server_almost_eol);
                 serverAgeIcon.setColorFilter(ContextCompat.getColor(context, R.color.nc_darkYellow),
@@ -561,7 +562,7 @@ public class SettingsController extends BaseController {
             if (currentUser.getDisplayName() != null) {
                 displayNameTextView.setText(currentUser.getDisplayName());
             }
-
+            
             DisplayUtils.loadAvatarImage(currentUser, avatarImageView, false);
 
             profileQueryDisposable = ncApi.getUserProfile(credentials,

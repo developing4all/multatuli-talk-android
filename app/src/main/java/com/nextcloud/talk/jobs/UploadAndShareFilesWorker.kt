@@ -20,15 +20,19 @@
 
 package com.nextcloud.talk.jobs
 
+import android.Manifest
 import android.content.Context
 import android.net.Uri
+import android.os.Build
 import android.util.Log
+import androidx.core.content.PermissionChecker
 import androidx.work.Data
 import androidx.work.OneTimeWorkRequest
 import androidx.work.WorkManager
 import androidx.work.Worker
 import androidx.work.WorkerParameters
 import autodagger.AutoInjector
+import com.bluelinelabs.conductor.Controller
 import com.nextcloud.talk.api.NcApi
 import com.nextcloud.talk.application.NextcloudTalkApplication
 import com.nextcloud.talk.models.database.UserEntity
@@ -37,6 +41,7 @@ import com.nextcloud.talk.utils.ApiUtils
 import com.nextcloud.talk.utils.UriUtils
 import com.nextcloud.talk.utils.bundle.BundleKeys.KEY_FILE_PATHS
 import com.nextcloud.talk.utils.bundle.BundleKeys.KEY_INTERNAL_USER_ID
+import com.nextcloud.talk.utils.bundle.BundleKeys.KEY_META_DATA
 import com.nextcloud.talk.utils.bundle.BundleKeys.KEY_ROOM_TOKEN
 import com.nextcloud.talk.utils.database.user.UserUtils
 import com.nextcloud.talk.utils.preferences.AppPreferences
@@ -48,6 +53,7 @@ import okhttp3.MediaType.Companion.toMediaTypeOrNull
 import okhttp3.RequestBody
 import retrofit2.Response
 import java.io.File
+import java.io.FileNotFoundException
 import java.io.FileOutputStream
 import java.io.InputStream
 import java.util.ArrayList
@@ -69,11 +75,22 @@ class UploadAndShareFilesWorker(val context: Context, workerParameters: WorkerPa
     override fun doWork(): Result {
         NextcloudTalkApplication.sharedApplication!!.componentApplication.inject(this)
 
+        if (!isStoragePermissionGranted(context)) {
+            Log.w(
+                TAG,
+                "Storage permission is not granted. As a developer please make sure you check for" +
+                    "permissions via UploadAndShareFilesWorker.isStoragePermissionGranted() and " +
+                    "UploadAndShareFilesWorker.requestStoragePermission() beforehand. If you already " +
+                    "did but end up with this warning, the user most likely revoked the permission"
+            )
+        }
+
         try {
             val currentUser = userUtils.currentUser
             val sourcefiles = inputData.getStringArray(DEVICE_SOURCEFILES)
             val ncTargetpath = inputData.getString(NC_TARGETPATH)
             val roomToken = inputData.getString(ROOM_TOKEN)
+            val metaData = inputData.getString(META_DATA)
 
             checkNotNull(currentUser)
             checkNotNull(sourcefiles)
@@ -85,7 +102,7 @@ class UploadAndShareFilesWorker(val context: Context, workerParameters: WorkerPa
                 val sourcefileUri = Uri.parse(sourcefiles[index])
                 val filename = UriUtils.getFileName(sourcefileUri, context)
                 val requestBody = createRequestBody(sourcefileUri)
-                uploadFile(currentUser, ncTargetpath, filename, roomToken, requestBody, sourcefileUri)
+                uploadFile(currentUser, ncTargetpath, filename, roomToken, requestBody, sourcefileUri, metaData)
             }
         } catch (e: IllegalStateException) {
             Log.e(javaClass.simpleName, "Something went wrong when trying to upload file", e)
@@ -102,8 +119,8 @@ class UploadAndShareFilesWorker(val context: Context, workerParameters: WorkerPa
         try {
             val input: InputStream = context.contentResolver.openInputStream(sourcefileUri)!!
             val buf = ByteArray(input.available())
-            while (input.read(buf) != -1);
-            requestBody = RequestBody.create("application/octet-stream".toMediaTypeOrNull(), buf)
+            while (input.read(buf) != -1)
+                requestBody = RequestBody.create("application/octet-stream".toMediaTypeOrNull(), buf)
         } catch (e: Exception) {
             Log.e(javaClass.simpleName, "failed to create RequestBody for $sourcefileUri", e)
         }
@@ -116,7 +133,8 @@ class UploadAndShareFilesWorker(val context: Context, workerParameters: WorkerPa
         filename: String,
         roomToken: String?,
         requestBody: RequestBody?,
-        sourcefileUri: Uri
+        sourcefileUri: Uri,
+        metaData: String?
     ) {
         ncApi.uploadFile(
             ApiUtils.getCredentials(currentUser.username, currentUser.token),
@@ -137,7 +155,7 @@ class UploadAndShareFilesWorker(val context: Context, workerParameters: WorkerPa
                 }
 
                 override fun onComplete() {
-                    shareFile(roomToken, currentUser, ncTargetpath, filename)
+                    shareFile(roomToken, currentUser, ncTargetpath, filename, metaData)
                     copyFileToCache(sourcefileUri, filename)
                 }
             })
@@ -145,17 +163,32 @@ class UploadAndShareFilesWorker(val context: Context, workerParameters: WorkerPa
 
     private fun copyFileToCache(sourceFileUri: Uri, filename: String) {
         val cachedFile = File(context.cacheDir, filename)
-        val outputStream = FileOutputStream(cachedFile)
-        val inputStream: InputStream = context.contentResolver.openInputStream(sourceFileUri)!!
 
-        inputStream.use { input ->
-            outputStream.use { output ->
-                input.copyTo(output)
+        if (cachedFile.exists()) {
+            Log.d(TAG, "file is already in cache")
+        } else {
+            val outputStream = FileOutputStream(cachedFile)
+            try {
+                val inputStream: InputStream? = context.contentResolver.openInputStream(sourceFileUri)
+                inputStream?.use { input ->
+                    outputStream.use { output ->
+                        input.copyTo(output)
+                    }
+                }
+            } catch (e: FileNotFoundException) {
+                Log.w(TAG, "failed to copy file to cache", e)
             }
         }
     }
 
-    private fun shareFile(roomToken: String?, currentUser: UserEntity, ncTargetpath: String?, filename: String?) {
+    private fun shareFile(
+        roomToken: String?,
+        currentUser: UserEntity,
+        ncTargetpath: String?,
+        filename: String?,
+        metaData: String?
+    ) {
+
         val paths: MutableList<String> = ArrayList()
         paths.add("$ncTargetpath/$filename")
 
@@ -163,6 +196,7 @@ class UploadAndShareFilesWorker(val context: Context, workerParameters: WorkerPa
             .putLong(KEY_INTERNAL_USER_ID, currentUser.id)
             .putString(KEY_ROOM_TOKEN, roomToken)
             .putStringArray(KEY_FILE_PATHS, paths.toTypedArray())
+            .putString(KEY_META_DATA, metaData)
             .build()
         val shareWorker = OneTimeWorkRequest.Builder(ShareOperationWorker::class.java)
             .setInputData(data)
@@ -172,8 +206,69 @@ class UploadAndShareFilesWorker(val context: Context, workerParameters: WorkerPa
 
     companion object {
         const val TAG = "UploadFileWorker"
+        const val REQUEST_PERMISSION = 3123
         const val DEVICE_SOURCEFILES = "DEVICE_SOURCEFILES"
         const val NC_TARGETPATH = "NC_TARGETPATH"
         const val ROOM_TOKEN = "ROOM_TOKEN"
+        const val META_DATA = "META_DATA"
+
+        fun isStoragePermissionGranted(context: Context): Boolean {
+            when {
+                Build.VERSION.SDK_INT > Build.VERSION_CODES.Q -> {
+                    return if (PermissionChecker.checkSelfPermission(
+                            context,
+                            Manifest.permission.READ_EXTERNAL_STORAGE
+                        ) == PermissionChecker.PERMISSION_GRANTED
+                    ) {
+                        Log.d(TAG, "Permission is granted (SDK 30 or greater)")
+                        true
+                    } else {
+                        Log.d(TAG, "Permission is revoked (SDK 30 or greater)")
+                        false
+                    }
+                }
+                Build.VERSION.SDK_INT >= Build.VERSION_CODES.M -> {
+                    return if (PermissionChecker.checkSelfPermission(
+                            context,
+                            Manifest.permission.WRITE_EXTERNAL_STORAGE
+                        ) == PermissionChecker.PERMISSION_GRANTED
+                    ) {
+                        Log.d(TAG, "Permission is granted")
+                        true
+                    } else {
+                        Log.d(TAG, "Permission is revoked")
+                        false
+                    }
+                }
+                else -> { // permission is automatically granted on sdk<23 upon installation
+                    Log.d(TAG, "Permission is granted")
+                    return true
+                }
+            }
+        }
+
+        fun requestStoragePermission(controller: Controller) {
+
+            when {
+                Build.VERSION.SDK_INT > Build.VERSION_CODES.Q -> {
+                    controller.requestPermissions(
+                        arrayOf(
+                            Manifest.permission.READ_EXTERNAL_STORAGE
+                        ),
+                        REQUEST_PERMISSION
+                    )
+                }
+                Build.VERSION.SDK_INT >= Build.VERSION_CODES.M -> {
+                    controller.requestPermissions(
+                        arrayOf(
+                            Manifest.permission.WRITE_EXTERNAL_STORAGE
+                        ),
+                        REQUEST_PERMISSION
+                    )
+                }
+                else -> { // permission is automatically granted on sdk<23 upon installation
+                }
+            }
+        }
     }
 }

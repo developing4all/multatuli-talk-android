@@ -3,6 +3,8 @@
  *   Nextcloud Talk application
  *
  *   @author Mario Danic
+ *   @author Andy Scherzinger
+ *   Copyright (C) 2021 Andy Scherzinger (infoi@andy-scherzinger.de)
  *   Copyright (C) 2017 Mario Danic (mario@lovelyhq.com)
  *
  *   This program is free software: you can redistribute it and/or modify
@@ -27,22 +29,14 @@ import android.os.Build
 import android.os.Bundle
 import android.provider.ContactsContract
 import android.text.TextUtils
-import android.view.ViewGroup
 import androidx.annotation.RequiresApi
 import autodagger.AutoInjector
-import butterknife.BindView
-import butterknife.ButterKnife
 import com.bluelinelabs.conductor.Conductor
 import com.bluelinelabs.conductor.Router
 import com.bluelinelabs.conductor.RouterTransaction
 import com.bluelinelabs.conductor.changehandler.HorizontalChangeHandler
 import com.bluelinelabs.conductor.changehandler.VerticalChangeHandler
-import com.google.android.material.appbar.AppBarLayout
-import com.google.android.material.appbar.MaterialToolbar
-import com.google.android.material.button.MaterialButton
-import com.google.android.material.card.MaterialCardView
 import com.google.android.material.snackbar.Snackbar
-import com.google.android.material.textview.MaterialTextView
 import com.nextcloud.talk.R
 import com.nextcloud.talk.api.NcApi
 import com.nextcloud.talk.application.NextcloudTalkApplication
@@ -53,6 +47,7 @@ import com.nextcloud.talk.controllers.ServerSelectionController
 import com.nextcloud.talk.controllers.SettingsController
 import com.nextcloud.talk.controllers.WebViewLoginController
 import com.nextcloud.talk.controllers.base.providers.ActionBarProvider
+import com.nextcloud.talk.databinding.ActivityMainBinding
 import com.nextcloud.talk.models.json.conversations.RoomOverall
 import com.nextcloud.talk.utils.ApiUtils
 import com.nextcloud.talk.utils.ConductorRemapping
@@ -76,24 +71,7 @@ import javax.inject.Inject
 
 @AutoInjector(NextcloudTalkApplication::class)
 class MainActivity : BaseActivity(), ActionBarProvider {
-
-    @BindView(R.id.appBar)
-    lateinit var appBar: AppBarLayout
-
-    @BindView(R.id.toolbar)
-    lateinit var toolbar: MaterialToolbar
-
-    @BindView(R.id.home_toolbar)
-    lateinit var searchCardView: MaterialCardView
-
-    @BindView(R.id.search_text)
-    lateinit var searchInputText: MaterialTextView
-
-    @BindView(R.id.switch_account_button)
-    lateinit var settingsButton: MaterialButton
-
-    @BindView(R.id.controller_container)
-    lateinit var container: ViewGroup
+    lateinit var binding: ActivityMainBinding
 
     @Inject
     lateinit var userUtils: UserUtils
@@ -113,14 +91,14 @@ class MainActivity : BaseActivity(), ActionBarProvider {
         super.onCreate(savedInstanceState)
         // Set the default theme to replace the launch screen theme.
         setTheme(R.style.AppTheme)
-        setContentView(R.layout.activity_main)
+        binding = ActivityMainBinding.inflate(layoutInflater)
+        setContentView(binding.root)
 
         NextcloudTalkApplication.sharedApplication!!.componentApplication.inject(this)
-        ButterKnife.bind(this)
 
-        setSupportActionBar(toolbar)
+        setSupportActionBar(binding.toolbar)
 
-        router = Conductor.attachRouter(this, container, savedInstanceState)
+        router = Conductor.attachRouter(this, binding.controllerContainer, savedInstanceState)
 
         var hasDb = true
 
@@ -133,7 +111,7 @@ class MainActivity : BaseActivity(), ActionBarProvider {
         if (intent.hasExtra(BundleKeys.KEY_FROM_NOTIFICATION_START_CALL)) {
             if (!router!!.hasRootController()) {
                 router!!.setRoot(
-                    RouterTransaction.with(ConversationsListController())
+                    RouterTransaction.with(ConversationsListController(Bundle()))
                         .pushChangeHandler(HorizontalChangeHandler())
                         .popChangeHandler(HorizontalChangeHandler())
                 )
@@ -143,7 +121,7 @@ class MainActivity : BaseActivity(), ActionBarProvider {
             if (hasDb) {
                 if (userUtils.anyUserExists()) {
                     router!!.setRoot(
-                        RouterTransaction.with(ConversationsListController())
+                        RouterTransaction.with(ConversationsListController(Bundle()))
                             .pushChangeHandler(HorizontalChangeHandler())
                             .popChangeHandler(HorizontalChangeHandler())
                     )
@@ -196,7 +174,7 @@ class MainActivity : BaseActivity(), ActionBarProvider {
     fun resetConversationsList() {
         if (userUtils.anyUserExists()) {
             router!!.setRoot(
-                RouterTransaction.with(ConversationsListController())
+                RouterTransaction.with(ConversationsListController(Bundle()))
                     .pushChangeHandler(HorizontalChangeHandler())
                     .popChangeHandler(HorizontalChangeHandler())
             )
@@ -242,7 +220,8 @@ class MainActivity : BaseActivity(), ActionBarProvider {
                         startConversation(user)
                     } else {
                         Snackbar.make(
-                            container, R.string.nc_phone_book_integration_account_not_found,
+                            binding.controllerContainer,
+                            R.string.nc_phone_book_integration_account_not_found,
                             Snackbar.LENGTH_LONG
                         ).show()
                     }
@@ -259,7 +238,7 @@ class MainActivity : BaseActivity(), ActionBarProvider {
         val credentials = ApiUtils.getCredentials(currentUser.username, currentUser.token)
         val retrofitBucket = ApiUtils.getRetrofitBucketForCreateRoom(
             apiVersion, currentUser.baseUrl, roomType,
-            userId, null
+            null, userId, null
         )
         ncApi.createRoom(
             credentials,
@@ -328,9 +307,7 @@ class MainActivity : BaseActivity(), ActionBarProvider {
 
     override fun onNewIntent(intent: Intent) {
         super.onNewIntent(intent)
-
         handleActionFromContact(intent)
-
         if (intent.hasExtra(BundleKeys.KEY_FROM_NOTIFICATION_START_CALL)) {
             if (intent.getBooleanExtra(BundleKeys.KEY_FROM_NOTIFICATION_START_CALL, false)) {
                 router!!.pushController(
@@ -341,7 +318,7 @@ class MainActivity : BaseActivity(), ActionBarProvider {
             } else {
                 ConductorRemapping.remapChatController(
                     router!!, intent.getLongExtra(BundleKeys.KEY_INTERNAL_USER_ID, -1),
-                    intent.getStringExtra(BundleKeys.KEY_ROOM_TOKEN), intent.extras!!, false
+                    intent.getStringExtra(KEY_ROOM_TOKEN)!!, intent.extras!!, false
                 )
             }
         }

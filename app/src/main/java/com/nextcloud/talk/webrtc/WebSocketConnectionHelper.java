@@ -20,17 +20,30 @@
 
 package com.nextcloud.talk.webrtc;
 
-import autodagger.AutoInjector;
 import com.nextcloud.talk.application.NextcloudTalkApplication;
 import com.nextcloud.talk.models.database.UserEntity;
 import com.nextcloud.talk.models.json.signaling.NCMessageWrapper;
-import com.nextcloud.talk.models.json.websocket.*;
+import com.nextcloud.talk.models.json.websocket.ActorWebSocketMessage;
+import com.nextcloud.talk.models.json.websocket.AuthParametersWebSocketMessage;
+import com.nextcloud.talk.models.json.websocket.AuthWebSocketMessage;
+import com.nextcloud.talk.models.json.websocket.CallOverallWebSocketMessage;
+import com.nextcloud.talk.models.json.websocket.CallWebSocketMessage;
+import com.nextcloud.talk.models.json.websocket.HelloOverallWebSocketMessage;
+import com.nextcloud.talk.models.json.websocket.HelloWebSocketMessage;
+import com.nextcloud.talk.models.json.websocket.RequestOfferOverallWebSocketMessage;
+import com.nextcloud.talk.models.json.websocket.RequestOfferSignalingMessage;
+import com.nextcloud.talk.models.json.websocket.RoomOverallWebSocketMessage;
+import com.nextcloud.talk.models.json.websocket.RoomWebSocketMessage;
+import com.nextcloud.talk.models.json.websocket.SignalingDataWebSocketMessageForOffer;
 import com.nextcloud.talk.utils.ApiUtils;
-import okhttp3.OkHttpClient;
 
-import javax.inject.Inject;
 import java.util.HashMap;
 import java.util.Map;
+
+import javax.inject.Inject;
+
+import autodagger.AutoInjector;
+import okhttp3.OkHttpClient;
 
 @AutoInjector(NextcloudTalkApplication.class)
 public class WebSocketConnectionHelper {
@@ -88,7 +101,7 @@ public class WebSocketConnectionHelper {
     }
 
     HelloOverallWebSocketMessage getAssembledHelloModel(UserEntity userEntity, String ticket) {
-        int apiVersion = ApiUtils.getSignalingApiVersion(userEntity, new int[] {2, 1});
+        int apiVersion = ApiUtils.getSignalingApiVersion(userEntity, new int[] {ApiUtils.APIv3, 2, 1});
 
         HelloOverallWebSocketMessage helloOverallWebSocketMessage = new HelloOverallWebSocketMessage();
         helloOverallWebSocketMessage.setType("hello");

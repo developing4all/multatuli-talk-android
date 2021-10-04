@@ -25,6 +25,7 @@
     <color name="colorPrimary">#aBaBaB</color>
     <color name="colorPrimaryDark">#666666</color>
     <color name="colorAccent">@color/colorPrimary</color>
+    <color name="disabled_text">#ff888888</color>
     <color name="textColorOnPrimaryBackground">#ffffff</color> <!-- white/black depending on primary color -->
     <color name="nc_login_text_color">#B3FFFFFF</color>
 
@@ -67,6 +68,7 @@
     <color name="fg_inverse">#FFFFFF</color>
 
     <color name="bg_default">#FFFFFF</color>
+    <color name="bg_default_semitransparent">#99FFFFFF</color>
     <color name="bg_inverse">@color/grey950</color>
     <color name="bg_dark_mention_chips">#333333</color>
 
@@ -83,4 +85,7 @@
     <!-- shimmer element colors -->
     <color name="nc_shimmer_default_color">#D7D7D7</color>
     <color name="nc_shimmer_darker_color">#B4B4B4</color>
+    <!-- voicemessage -->
+    <color name="nc_voice_message_outgoing_controls">#606060</color>
+
 </resources>

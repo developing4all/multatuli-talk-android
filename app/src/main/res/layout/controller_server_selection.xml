@@ -40,11 +40,11 @@
 
         <ImageView
             android:id="@+id/image_logo"
-            android:layout_width="96dp"
+            android:layout_width="match_parent"
             android:layout_height="96dp"
             android:layout_marginBottom="@dimen/standard_margin"
-            android:contentDescription="@string/nc_app_name"
-            android:scaleType="fitXY"
+            android:contentDescription="@string/nc_app_product_name"
+            android:scaleType="centerInside"
             app:srcCompat="@drawable/ic_logo" />
 
         <LinearLayout
@@ -99,6 +99,7 @@
                 android:paddingEnd="8dp"
                 android:paddingBottom="2dp"
                 android:text="@string/nc_server_helper_text"
+                android:textAlignment="viewStart"
                 android:textColor="@color/nc_login_text_color" />
 
             <LinearLayout
@@ -121,12 +122,14 @@
                     android:layout_width="match_parent"
                     android:layout_height="wrap_content"
                     android:ellipsize="end"
-                    android:gravity="center_vertical"
+                    android:gravity="start|center_vertical"
                     android:lineSpacingMultiplier="1.2"
                     android:lines="2"
                     android:paddingStart="5dp"
                     android:paddingEnd="8dp"
-                    android:text="@string/nc_server_testing_connection" />
+                    android:text="@string/nc_server_testing_connection"
+                    android:textAlignment="viewStart"
+                    android:textColor="@color/white" />
 
             </LinearLayout>
 
@@ -136,12 +139,14 @@
                 android:layout_height="wrap_content"
                 android:drawablePadding="5dp"
                 android:ellipsize="end"
-                android:gravity="center_vertical"
+                android:gravity="start|center_vertical"
                 android:lineSpacingMultiplier="1.2"
                 android:lines="2"
                 android:paddingStart="16dp"
                 android:paddingEnd="8dp"
                 android:text="@string/nc_server_unsupported"
+                android:textAlignment="viewStart"
+                android:textColor="@color/white"
                 android:visibility="invisible"
                 app:drawableStartCompat="@android:drawable/stat_sys_warning"
                 tools:visibility="visible" />
@@ -150,11 +155,11 @@
                 android:id="@+id/helper_text_view"
                 android:layout_width="wrap_content"
                 android:layout_height="wrap_content"
-                android:layout_marginStart="@dimen/activity_horizontal_margin"
-                android:layout_marginTop="58dp"
-                android:layout_marginEnd="@dimen/activity_horizontal_margin"
+                android:layout_marginTop="42dp"
                 android:lineSpacingMultiplier="1.2"
                 android:lines="2"
+                android:minHeight="@dimen/min_size_clickable_area"
+                android:padding="@dimen/standard_padding"
                 android:text="@string/nc_get_from_provider"
                 android:textAlignment="center"
                 android:textColor="@color/nc_login_text_color" />
@@ -163,11 +168,11 @@
                 android:id="@+id/cert_text_view"
                 android:layout_width="wrap_content"
                 android:layout_height="wrap_content"
-                android:layout_marginStart="@dimen/activity_horizontal_margin"
-                android:layout_marginTop="32dp"
-                android:layout_marginEnd="@dimen/activity_horizontal_margin"
+                android:layout_marginTop="@dimen/standard_margin"
                 android:lineSpacingMultiplier="1.2"
                 android:lines="2"
+                android:minHeight="@dimen/min_size_clickable_area"
+                android:padding="@dimen/standard_padding"
                 android:text="@string/nc_configure_cert_auth"
                 android:textAlignment="center"
                 android:textColor="@color/nc_login_text_color" />

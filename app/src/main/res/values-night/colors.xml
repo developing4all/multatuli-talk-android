@@ -27,6 +27,7 @@
     <color name="colorPrimary">#0082C9</color>
     <color name="colorPrimaryDark">#006AA3</color>
     <color name="colorAccent">@color/colorPrimary</color>
+    <color name="disabled_text">#ff6F6F6F</color>
 
     <!-- App bar -->
     <color name="appbar">#1E1E1E</color>
@@ -39,6 +40,7 @@
     <color name="low_emphasis_text">#61ffffff</color>
 
     <color name="bg_default">#121212</color>
+    <color name="bg_default_semitransparent">#99121212</color>
     <color name="bg_inverse">@color/grey950</color>
 
     <color name="fg_default">#FFFFFF</color>
@@ -55,8 +57,8 @@
 
     <!-- Chat window incoming message text & informational -->
     <color name="bg_bottom_sheet">#121212</color>
-    <color name="bg_message_list_incoming_bubble">#484848</color>
-    <color name="bg_message_list_incoming_bubble_deleted">#66484848</color>
+    <color name="bg_message_list_incoming_bubble">#1CFFFFFF</color>
+    <color name="bg_message_list_incoming_bubble_deleted">#14FFFFFF</color>
 
     <color name="textColorMaxContrast">#8c8c8c</color>
 

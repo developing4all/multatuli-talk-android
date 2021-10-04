@@ -44,7 +44,7 @@ public class DatabaseModule {
     @Singleton
     public SqlCipherDatabaseSource provideSqlCipherDatabaseSource(@NonNull final Context context) {
         return new SqlCipherDatabaseSource(context, Models.DEFAULT,
-                context.getResources().getString(R.string.nc_app_name).toLowerCase()
+                context.getResources().getString(R.string.nc_app_product_name).toLowerCase()
                         .replace(" ", "_").trim() + ".sqlite",
                 context.getString(R.string.nc_talk_database_encryption_key), 6);
     }
@@ -59,6 +59,8 @@ public class DatabaseModule {
     @Provides
     @Singleton
     public AppPreferences providePreferences(@NonNull final Context poContext) {
-        return StoreBox.create(poContext, AppPreferences.class);
+        AppPreferences p =  StoreBox.create(poContext, AppPreferences.class);
+        p.removeLinkPreviews();
+        return p;
     }
 }

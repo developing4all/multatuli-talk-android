@@ -27,6 +27,7 @@ import com.nextcloud.talk.BuildConfig;
 import com.nextcloud.talk.R;
 import com.nextcloud.talk.application.NextcloudTalkApplication;
 import com.nextcloud.talk.models.RetrofitBucket;
+import com.nextcloud.talk.models.database.CapabilitiesUtil;
 import com.nextcloud.talk.models.database.UserEntity;
 
 import java.util.HashMap;
@@ -115,7 +116,7 @@ public class ApiUtils {
         return getConversationApiVersion(capabilities, versions);
     }
 
-    public static int getConversationApiVersion(UserEntity capabilities, int[] versions) throws NoSupportedApiException {
+    public static int getConversationApiVersion(UserEntity user, int[] versions) throws NoSupportedApiException {
         boolean hasApiV4 = false;
         for (int version : versions) {
             hasApiV4 |= version == 4;
@@ -127,16 +128,18 @@ public class ApiUtils {
         }
 
         for (int version : versions) {
-            if (capabilities.hasSpreedFeatureCapability("conversation-v" + version)) {
+            if (CapabilitiesUtil.hasSpreedFeatureCapability(user, "conversation-v" + version)) {
                 return version;
             }
 
             // Fallback for old API versions
             if ((version == 1 || version == 2)) {
-                if (capabilities.hasSpreedFeatureCapability("conversation-v2")) {
+                if (CapabilitiesUtil.hasSpreedFeatureCapability(user, "conversation-v2")) {
                     return version;
                 }
-                if (version == 1  && capabilities.hasSpreedFeatureCapability("conversation")) {
+                if (version == 1  &&
+                        CapabilitiesUtil.hasSpreedFeatureCapability(user, "mention-flag") &&
+                        !CapabilitiesUtil.hasSpreedFeatureCapability(user, "conversation-v4")) {
                     return version;
                 }
             }
@@ -144,23 +147,30 @@ public class ApiUtils {
         throw new NoSupportedApiException();
     }
 
-    public static int getSignalingApiVersion(UserEntity capabilities, int[] versions) throws NoSupportedApiException {
+    public static int getSignalingApiVersion(UserEntity user, int[] versions) throws NoSupportedApiException {
         for (int version : versions) {
-            if (version == 2 && capabilities.hasSpreedFeatureCapability("sip-support")) {
+            if (CapabilitiesUtil.hasSpreedFeatureCapability(user, "signaling-v" + version)) {
                 return version;
             }
 
-            if (version == 1) {
-                // Has no capability, we just assume it is always there for now.
+            if (version == 2 &&
+                    CapabilitiesUtil.hasSpreedFeatureCapability(user, "sip-support") &&
+                    !CapabilitiesUtil.hasSpreedFeatureCapability(user, "signaling-v3")) {
+                return version;
+            }
+
+            if (version == 1 &&
+                    !CapabilitiesUtil.hasSpreedFeatureCapability(user, "signaling-v3")) {
+                // Has no capability, we just assume it is always there when there is no v3 or later
                 return version;
             }
         }
         throw new NoSupportedApiException();
     }
 
-    public static int getChatApiVersion(UserEntity capabilities, int[] versions) throws NoSupportedApiException {
+    public static int getChatApiVersion(UserEntity user, int[] versions) throws NoSupportedApiException {
         for (int version : versions) {
-            if (version == 1 && capabilities.hasSpreedFeatureCapability("chat-v2")) {
+            if (version == 1 && CapabilitiesUtil.hasSpreedFeatureCapability(user, "chat-v2")) {
                 // Do not question that chat-v2 capability shows the availability of api/v1/ endpoint *see no evil*
                 return version;
             }
@@ -255,6 +265,7 @@ public class ApiUtils {
     }
 
     public static RetrofitBucket getRetrofitBucketForCreateRoom(int version, String baseUrl, String roomType,
+                                                                @Nullable String source,
                                                                 @Nullable String invite,
                                                                 @Nullable String conversationName) {
         RetrofitBucket retrofitBucket = new RetrofitBucket();
@@ -264,6 +275,9 @@ public class ApiUtils {
         queryMap.put("roomType", roomType);
         if (invite != null) {
             queryMap.put("invite", invite);
+        }
+        if (source != null) {
+            queryMap.put("source", source);
         }
 
         if (conversationName != null) {
@@ -289,15 +303,15 @@ public class ApiUtils {
 
     }
 
-    public static RetrofitBucket getRetrofitBucketForAddGroupParticipant(int version, String baseUrl, String token, String group) {
-        RetrofitBucket retrofitBucket = getRetrofitBucketForAddParticipant(version, baseUrl, token, group);
-        retrofitBucket.getQueryMap().put("source", "groups");
-        return retrofitBucket;
-    }
-
-    public static RetrofitBucket getRetrofitBucketForAddMailParticipant(int version, String baseUrl, String token, String mail) {
-        RetrofitBucket retrofitBucket = getRetrofitBucketForAddParticipant(version, baseUrl, token, mail);
-        retrofitBucket.getQueryMap().put("source", "emails");
+    public static RetrofitBucket getRetrofitBucketForAddParticipantWithSource(
+            int version,
+            String baseUrl,
+            String token,
+            String source,
+            String id
+                                                                             ) {
+        RetrofitBucket retrofitBucket = getRetrofitBucketForAddParticipant(version, baseUrl, token, id);
+        retrofitBucket.getQueryMap().put("source", source);
         return retrofitBucket;
     }
 
@@ -375,5 +389,9 @@ public class ApiUtils {
 
     public static String getUrlForUserFields(String baseUrl) {
         return baseUrl + ocsApiVersion + "/cloud/user/fields";
+    }
+
+    public static String getUrlToSendLocation(int version, String baseUrl, String roomToken) {
+        return getUrlForChat(version, baseUrl, roomToken) + "/share";
     }
 }

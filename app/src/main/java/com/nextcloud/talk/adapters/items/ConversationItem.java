@@ -22,13 +22,14 @@
 
 package com.nextcloud.talk.adapters.items;
 
+import android.annotation.SuppressLint;
 import android.content.Context;
 import android.content.res.ColorStateList;
 import android.graphics.Color;
 import android.graphics.Typeface;
-import android.graphics.drawable.BitmapDrawable;
 import android.graphics.drawable.Drawable;
 import android.graphics.drawable.LayerDrawable;
+import android.os.Build;
 import android.text.TextUtils;
 import android.text.format.DateUtils;
 import android.view.View;
@@ -41,6 +42,7 @@ import com.facebook.drawee.view.SimpleDraweeView;
 import com.google.android.material.chip.Chip;
 import com.nextcloud.talk.R;
 import com.nextcloud.talk.application.NextcloudTalkApplication;
+import com.nextcloud.talk.models.database.CapabilitiesUtil;
 import com.nextcloud.talk.models.database.UserEntity;
 import com.nextcloud.talk.models.json.chat.ChatMessage;
 import com.nextcloud.talk.models.json.conversations.Conversation;
@@ -105,6 +107,7 @@ public class ConversationItem extends AbstractFlexibleItem<ConversationItem.Conv
         return new ConversationItemViewHolder(view, adapter);
     }
 
+    @SuppressLint("SetTextI18n")
     @Override
     public void bindViewHolder(FlexibleAdapter<IFlexible> adapter, ConversationItemViewHolder holder, int position, List<Object> payloads) {
         Context appContext =
@@ -124,18 +127,8 @@ public class ConversationItem extends AbstractFlexibleItem<ConversationItem.Conv
         }
 
         if (conversation.getUnreadMessages() > 0) {
-            holder.dialogName.setTypeface(
-                    holder.dialogName.getTypeface(),
-                    Typeface.BOLD
-            );
-            holder.dialogDate.setTypeface(
-                    holder.dialogDate.getTypeface(),
-                    Typeface.BOLD
-            );
-            holder.dialogLastMessage.setTypeface(
-                    holder.dialogLastMessage.getTypeface(),
-                    Typeface.BOLD
-            );
+            holder.dialogName.setTypeface(holder.dialogName.getTypeface(), Typeface.BOLD);
+            holder.dialogLastMessage.setTypeface(holder.dialogLastMessage.getTypeface(), Typeface.BOLD);
             holder.dialogUnreadBubble.setVisibility(View.VISIBLE);
             if (conversation.getUnreadMessages() < 1000) {
                 holder.dialogUnreadBubble.setText(Long.toString(conversation.getUnreadMessages()));
@@ -143,29 +136,45 @@ public class ConversationItem extends AbstractFlexibleItem<ConversationItem.Conv
                 holder.dialogUnreadBubble.setText(R.string.tooManyUnreadMessages);
             }
 
-            if (conversation.isUnreadMention() || conversation.type == Conversation.ConversationType.ROOM_TYPE_ONE_TO_ONE_CALL) {
+            ColorStateList lightBubbleFillColor = ColorStateList.valueOf(
+                ContextCompat.getColor(context,
+                R.color.conversation_unread_bubble));
+            int lightBubbleTextColor = ContextCompat.getColor(
+                context,
+                R.color.conversation_unread_bubble_text);
+            ColorStateList lightBubbleStrokeColor = ColorStateList.valueOf(
+                ContextCompat.getColor(context,
+                R.color.colorPrimary));
+
+            if (conversation.type == Conversation.ConversationType.ROOM_TYPE_ONE_TO_ONE_CALL) {
                 holder.dialogUnreadBubble.setChipBackgroundColorResource(R.color.colorPrimary);
                 holder.dialogUnreadBubble.setTextColor(Color.WHITE);
+            } else if (conversation.isUnreadMention()) {
+                if (CapabilitiesUtil.hasSpreedFeatureCapability(userEntity, "direct-mention-flag")){
+                    if (conversation.getUnreadMentionDirect()) {
+                        holder.dialogUnreadBubble.setChipBackgroundColorResource(R.color.colorPrimary);
+                        holder.dialogUnreadBubble.setTextColor(Color.WHITE);
+                    } else {
+                        holder.dialogUnreadBubble.setChipBackgroundColor(ColorStateList.valueOf(
+                            ContextCompat.getColor(context, R.color.white)));
+                        holder.dialogUnreadBubble.setTextColor(ContextCompat.getColor(
+                            context,
+                            R.color.colorPrimary));
+                        holder.dialogUnreadBubble.setChipStrokeWidth(6.0f);
+                        holder.dialogUnreadBubble.setChipStrokeColor(lightBubbleStrokeColor);
+                    }
+                } else {
+                    holder.dialogUnreadBubble.setChipBackgroundColorResource(R.color.colorPrimary);
+                    holder.dialogUnreadBubble.setTextColor(Color.WHITE);
+                }
             } else {
-                holder.dialogUnreadBubble.setChipBackgroundColor(
-                        ColorStateList.valueOf(ContextCompat.getColor(context, R.color.conversation_unread_bubble)));
-                holder.dialogUnreadBubble.setTextColor(
-                        ContextCompat.getColor(context, R.color.conversation_unread_bubble_text));
+                holder.dialogUnreadBubble.setChipBackgroundColor(lightBubbleFillColor);
+                holder.dialogUnreadBubble.setTextColor(lightBubbleTextColor);
             }
         } else {
-            holder.dialogName.setTypeface(
-                    holder.dialogName.getTypeface(),
-                    Typeface.NORMAL
-            );
-            holder.dialogDate.setTypeface(
-                    holder.dialogDate.getTypeface(),
-                    Typeface.NORMAL
-            );
-            holder.dialogLastMessage.setTypeface(
-                    holder.dialogLastMessage.getTypeface(),
-                    Typeface.NORMAL
-            );
-
+            holder.dialogName.setTypeface(null, Typeface.NORMAL);
+            holder.dialogDate.setTypeface(null, Typeface.NORMAL);
+            holder.dialogLastMessage.setTypeface(null, Typeface.NORMAL);
             holder.dialogUnreadBubble.setVisibility(View.GONE);
         }
 
@@ -217,15 +226,13 @@ public class ConversationItem extends AbstractFlexibleItem<ConversationItem.Conv
             switch (objectType) {
                 case "share:password":
                     shouldLoadAvatar = false;
-                    holder.dialogAvatar.getHierarchy().setImage(new BitmapDrawable(DisplayUtils
-                            .getRoundedBitmapFromVectorDrawableResource(context.getResources(),
-                                    R.drawable.ic_file_password_request)), 100, true);
+                    holder.dialogAvatar.setImageDrawable(ContextCompat.getDrawable(context,
+                                                                                   R.drawable.ic_circular_lock));
                     break;
                 case "file":
                     shouldLoadAvatar = false;
-                    holder.dialogAvatar.getHierarchy().setImage(new BitmapDrawable(DisplayUtils
-                            .getRoundedBitmapFromVectorDrawableResource(context.getResources(),
-                                    R.drawable.ic_file_icon)), 100, true);
+                    holder.dialogAvatar.setImageDrawable(ContextCompat.getDrawable(context,
+                                                                                   R.drawable.ic_circular_document));
                     break;
                 default:
                     break;
@@ -233,13 +240,16 @@ public class ConversationItem extends AbstractFlexibleItem<ConversationItem.Conv
         }
 
         if (Conversation.ConversationType.ROOM_SYSTEM.equals(conversation.getType())) {
-            Drawable[] layers = new Drawable[2];
-            layers[0] = context.getDrawable(R.drawable.ic_launcher_background);
-            layers[1] = context.getDrawable(R.drawable.ic_launcher_foreground);
-            LayerDrawable layerDrawable = new LayerDrawable(layers);
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+                Drawable[] layers = new Drawable[2];
+                layers[0] = ContextCompat.getDrawable(context, R.drawable.ic_launcher_background);
+                layers[1] = ContextCompat.getDrawable(context, R.drawable.ic_launcher_foreground);
+                LayerDrawable layerDrawable = new LayerDrawable(layers);
 
-            holder.dialogAvatar.getHierarchy().setPlaceholderImage(DisplayUtils.getRoundedDrawable(layerDrawable));
-
+                holder.dialogAvatar.getHierarchy().setPlaceholderImage(DisplayUtils.getRoundedDrawable(layerDrawable));
+            } else {
+                holder.dialogAvatar.getHierarchy().setPlaceholderImage(R.mipmap.ic_launcher);
+            }
             shouldLoadAvatar = false;
         }
 
@@ -258,10 +268,12 @@ public class ConversationItem extends AbstractFlexibleItem<ConversationItem.Conv
                     }
                     break;
                 case ROOM_GROUP_CALL:
-                        holder.dialogAvatar.setImageResource(R.drawable.ic_circular_group);
+                        holder.dialogAvatar.setImageDrawable(ContextCompat.getDrawable(context,
+                                                                                       R.drawable.ic_circular_group));
                     break;
                 case ROOM_PUBLIC_CALL:
-                        holder.dialogAvatar.setImageResource(R.drawable.ic_circular_link);
+                        holder.dialogAvatar.setImageDrawable(ContextCompat.getDrawable(context,
+                                                                                       R.drawable.ic_circular_link));
                     break;
                 default:
                     holder.dialogAvatar.setVisibility(View.GONE);
